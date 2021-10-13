@@ -27,7 +27,7 @@ The application specified in the `com.google.changestreams.Main` will perform th
 We provided a bash script to facilitate the execution. You can execute it like so:
 
 ```bash
-./run.sh \
+./run_gcs.sh \
   --project <my-gcp-project> \
   --instance <my-spanner-instance> \
   --database <my-spanner-database> \

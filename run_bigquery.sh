@@ -13,6 +13,8 @@ Usage: ./run.sh
   -c <change stream name>
   -g <gcs bucket>
   -r <job region>
+  -bd <BigQuery dataset>
+  -bt <BigQuery table name>
 EOF
   exit
 }
@@ -70,6 +72,16 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    -bd|--big-query-dataset)
+      BIG_QUERY_DATASET="$2"
+      shift
+      shift
+      ;;
+    -bt|--big-query-table-name)
+      BIG_QUERY_TABLE_NAME="$2"
+      shift
+      shift
+      ;;
   *)
     echo "Unknown option $1"
     print_usage
@@ -89,7 +101,7 @@ test ! "${REGION}" && echo "Missing region" && print_usage
 mvn \
   clean \
   compile \
-  exec:java -Dexec.mainClass=com.google.changestreams.sample.Main \
+  exec:java -Dexec.mainClass=com.google.changestreams.sample.bigquery.Main \
   -Dexec.args=" \
     --project=${PROJECT} \
     --instance=${INSTANCE} \
@@ -100,8 +112,10 @@ mvn \
     --gcsBucket=${GCS_BUCKET} \
     --gcpTempLocation=gs://${GCS_BUCKET}/temp \
     --region=${REGION} \
+    --bigQueryDataset=${BIG_QUERY_DATASET} \
+    --bigQueryTableName=${BIG_QUERY_TABLE_NAME} \
     --runner=DataflowRunner \
-    --numWorkers=1 \
-    --maxNumWorkers=1 \
+    --numWorkers=100 \
+    --maxNumWorkers=100 \
     --experiments=use_unified_worker,use_runner_v2 \
   "

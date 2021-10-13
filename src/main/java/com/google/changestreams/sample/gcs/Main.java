@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.changestreams.sample;
+package com.google.changestreams.sample.gcs;
 
 import static org.apache.beam.runners.core.construction.resources.PipelineResources.detectClassPathResourcesToStage;
 
+import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
 import java.io.File;
 import java.util.ArrayList;
