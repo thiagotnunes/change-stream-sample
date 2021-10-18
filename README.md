@@ -12,6 +12,7 @@ In this repository we show a sample Dataflow pipeline using the Cloud Spanner Ch
     - The authenticated account must have access to update Cloud Spanner database ddl in project/metadata instance/metadata database used (more at [Cloud Spanner IAM](https://cloud.google.com/spanner/docs/iam)).
 - You must have set up [dataflow security and permissions](https://cloud.google.com/dataflow/docs/concepts/security-and-permissions#security_and_permissions_for_local_pipelines) correctly.
 - You must have pre-created a Cloud Spanner change stream to be read from.
+- You must have pre-installed the Apache Beam Connector jar. You can see the specified jar version in the application `pom.xml` file, under `connector.version`.
 
 ## Application
 
