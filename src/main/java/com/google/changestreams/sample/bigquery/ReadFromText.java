@@ -7,53 +7,30 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
-import io.opencensus.trace.samplers.Samplers;
 import java.io.File;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.apache.beam.runners.dataflow.DataflowRunner;
 import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import org.apache.beam.sdk.Pipeline;
+import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
-import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
-import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
-import org.apache.beam.sdk.io.gcp.spanner.cdc.model.DataChangeRecord;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
-import org.apache.beam.sdk.transforms.MapElements;
-import org.apache.beam.sdk.values.TypeDescriptor;
+import org.apache.beam.sdk.transforms.Create;
+import org.apache.beam.sdk.transforms.ParDo;
 
-public class Main {
+public class ReadFromText {
 
   private static final String BQ_SCHEMA_NAME_PARTITION_TOKEN = "partition_token";
-  private static final String BQ_SCHEMA_NAME_TRANSACTION_ID = "server_transaction_id";
-  private static final String BQ_SCHEMA_NAME_COMMIT_TIMESTAMP = "commit_timestamp";
-  private static final String BQ_SCHEMA_NAME_EMIT_TIMESTAMP = "emit_timestamp";
+  private static final String BQ_SCHEMA_NAME_COMMITTED_TIMESTAMP = "committed_timestamp";
   private static final String BQ_SCHEMA_NAME_BQ_TIMESTAMP = "bq_timestamp";
-
-  private static class RecordWithMetadata implements Serializable {
-
-    public DataChangeRecord dataChangeRecord;
-    public Timestamp emittedTime;
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (!(o instanceof RecordWithMetadata)) {
-        return false;
-      }
-      RecordWithMetadata that = (RecordWithMetadata) o;
-      return dataChangeRecord.equals(that.dataChangeRecord) && emittedTime.equals(that.emittedTime);
-    }
-  }
 
   public static void main(String[] args) {
 
@@ -62,31 +39,18 @@ public class Main {
         .as(SampleOptions.class);
 
     options.setFilesToStage(deduplicateFilesToStage(options));
-    options.setEnableStreamingEngine(true);
+
     options.setStreaming(true);
 
     final Pipeline pipeline = Pipeline.create(options);
 
     String projectId = options.getProject();
-    String instanceId = options.getInstance();
-    String databaseId = options.getDatabase();
-    String metadataInstanceId = options.getMetadataInstance();
-    String metadataDatabaseId = options.getMetadataDatabase();
-    String changeStreamName = options.getChangeStreamName();
     String bigQueryDataset = options.getBigQueryDataset();
     String bigQueryTableName = options.getBigQueryTableName();
+    String gcsTempLocation = options.getGcpTempLocation();
 
     final String bigQueryTable = String
         .format("%s:%s.%s", projectId, bigQueryDataset, bigQueryTableName);
-
-    // TODO uncomment when getting data records from Spanner
-    // Spanner spanner =
-    //     SpannerOptions.newBuilder()
-    //         .setProjectId(projectId)
-    //         .build()
-    //         .getService();
-    // DatabaseClient databaseClient = spanner
-    //     .getDatabaseClient(DatabaseId.of(projectId, instanceId, databaseId));
 
     final Timestamp now = Timestamp.now();
     final Timestamp after10Minutes = Timestamp.ofTimeSecondsAndNanos(
@@ -94,24 +58,51 @@ public class Main {
         now.getNanos()
     );
 
+    final List<String> lines = Arrays.asList(
+        "To be, or not to be: that is the question: ",
+        "To be, or not to be: that is the question: ",
+        "To be, or not to be: that is the question: ",
+        "To be, or not to be: that is the question: ",
+        "To be, or not to be: that is the question: ",
+        "To be, or not to be: that is the question: ",
+        "To be, or not to be: that is the question: ",
+        "To be, or not to be: that is the question: ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "Whether 'tis nobler in the mind to suffer ",
+        "The slings and arrows of outrageous fortune, ",
+        "The slings and arrows of outrageous fortune, ",
+        "The slings and arrows of outrageous fortune, ",
+        "The slings and arrows of outrageous fortune, ",
+        "The slings and arrows of outrageous fortune, ",
+        "The slings and arrows of outrageous fortune, ",
+        "The slings and arrows of outrageous fortune, ",
+        "Or to take arms against a sea of troubles, ",
+        "Or to take arms against a sea of troubles, ",
+        "Or to take arms against a sea of troubles, ",
+        "Or to take arms against a sea of troubles, ",
+        "Or to take arms against a sea of troubles, ",
+        "Or to take arms against a sea of troubles, ",
+        "Or to take arms against a sea of troubles, ",
+        "Or to take arms against a sea of troubles, ");
+
+    // Create a Java Collection, in this case a List of Strings.
+    final List<String> sources = new ArrayList<>();
+    int numOfSources = 100;
+    for (int i = 0; i < numOfSources; i++) {
+      sources.add(String.format("%d", i));
+    }
+
+
     pipeline
-        // Reads from the change stream
-        .apply(SpannerIO
-            .readChangeStream()
-            .withSpannerConfig(SpannerConfig
-                .create()
-                .withHost(StaticValueProvider.of("https://staging-wrenchworks.sandbox.googleapis.com"))
-                .withProjectId(projectId)
-                .withInstanceId(instanceId)
-                .withDatabaseId(databaseId)
-            )
-            .withMetadataInstance(metadataInstanceId)
-            .withMetadataDatabase(metadataDatabaseId)
-            .withChangeStreamName(changeStreamName)
-            .withInclusiveStartAt(now)
-            .withInclusiveEndAt(after10Minutes)
-            .withTraceSampler(Samplers.alwaysSample())
-        )
+        // .apply(Create.of(lines)).setCoder(StringUtf8Coder.of())
+        .apply("Create SDF sources", Create.of(sources)).setCoder(StringUtf8Coder.of())
+        .apply("Generate timestamps", ParDo.of(new GenerateRandomStringsDoFn<String, String>()))
 
         // Group records into 1 minute windows
         // .apply(Window.into(FixedWindows.of(Duration.standardMinutes(10))))
@@ -119,15 +110,6 @@ public class Main {
         // .apply("Filter to only records from the Users table", Filter.by(
         //     (SerializableFunction<DataChangeRecord, Boolean>) record -> record.getTableName()
         //         .equalsIgnoreCase("Users")))
-
-        .apply("Add emitted time to records",
-            MapElements.into(TypeDescriptor.of(RecordWithMetadata.class)).via(record -> {
-                  RecordWithMetadata recordWithMetadata = new RecordWithMetadata();
-                  recordWithMetadata.dataChangeRecord = record;
-                  recordWithMetadata.emittedTime = Timestamp.now();
-                  return recordWithMetadata;
-                }
-            ))
 
         // TODO map the change record mods into Spanner data records
         // TODO handle updates, deletes, and inserts differently in BigQuery
@@ -150,21 +132,16 @@ public class Main {
         // Writes each window of records into BigQuery
         .apply("Write to BigQuery table",
             BigQueryIO
-                .<RecordWithMetadata>write()
+                .<Long>write()
+                .withCustomGcsTempLocation(StaticValueProvider.of(gcsTempLocation))
                 .to(bigQueryTable)
                 .withCreateDisposition(CreateDisposition.CREATE_IF_NEEDED)
                 .withWriteDisposition(Write.WriteDisposition.WRITE_APPEND)
                 .withSchema(createSchema())
-                .withAutoSharding()
-                .optimizedWrites()
-                .withFormatFunction((RecordWithMetadata elem) ->
+                .withFormatFunction((Long seconds) ->
                     new TableRow()
-                        .set(BQ_SCHEMA_NAME_PARTITION_TOKEN,
-                            elem.dataChangeRecord.getPartitionToken())
-                        .set(BQ_SCHEMA_NAME_TRANSACTION_ID, elem.dataChangeRecord.getServerTransactionId())
-                        .set(BQ_SCHEMA_NAME_COMMIT_TIMESTAMP,
-                            elem.dataChangeRecord.getCommitTimestamp().getSeconds())
-                        .set(BQ_SCHEMA_NAME_EMIT_TIMESTAMP, elem.emittedTime.getSeconds())
+                        .set(BQ_SCHEMA_NAME_PARTITION_TOKEN, UUID.randomUUID().toString())
+                        .set(BQ_SCHEMA_NAME_COMMITTED_TIMESTAMP, seconds)
                         .set(BQ_SCHEMA_NAME_BQ_TIMESTAMP, "AUTO")
                 )
         );
@@ -180,15 +157,7 @@ public class Main {
                 .setType("STRING")
                 .setMode("REQUIRED"),
             new TableFieldSchema()
-                .setName(BQ_SCHEMA_NAME_TRANSACTION_ID)
-                .setType("STRING")
-                .setMode("REQUIRED"),
-            new TableFieldSchema()
-                .setName(BQ_SCHEMA_NAME_COMMIT_TIMESTAMP)
-                .setType("TIMESTAMP")
-                .setMode("REQUIRED"),
-            new TableFieldSchema()
-                .setName(BQ_SCHEMA_NAME_EMIT_TIMESTAMP)
+                .setName(BQ_SCHEMA_NAME_COMMITTED_TIMESTAMP)
                 .setType("TIMESTAMP")
                 .setMode("REQUIRED"),
             new TableFieldSchema()
