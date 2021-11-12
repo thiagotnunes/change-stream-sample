@@ -21,6 +21,7 @@ import static org.apache.beam.runners.core.construction.resources.PipelineResour
 import com.google.cloud.Timestamp;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.Window;
@@ -39,11 +41,18 @@ import org.joda.time.Duration;
 
 public class Main {
 
+  // The Connector works with the Dataflow Runner V2, which has a richer set of features,
+  // improved efficiency and performance (see more at
+  // https://cloud.google.com/dataflow/docs/guides/deploying-a-pipeline#dataflow-runner-v2)
+  private static final List<String> EXPERIMENTS = Arrays
+      .asList("use_unified_worker", "use_runner_v2");
+
   public static void main(String[] args) {
     final SampleOptions options = PipelineOptionsFactory
         .fromArgs(args)
         .as(SampleOptions.class);
     options.setFilesToStage(deduplicateFilesToStage(options));
+    options.setExperiments(EXPERIMENTS);
     final Pipeline pipeline = Pipeline.create(options);
 
     final String projectId = options.getProject();
@@ -66,6 +75,7 @@ public class Main {
             .readChangeStream()
             .withSpannerConfig(SpannerConfig
                 .create()
+                .withHost(ValueProvider.StaticValueProvider.of("https://staging-wrenchworks.sandbox.googleapis.com"))
                 .withProjectId(projectId)
                 .withInstanceId(instanceId)
                 .withDatabaseId(databaseId)
@@ -102,7 +112,7 @@ public class Main {
    * This is to avoid a bug in Dataflow, where if there are duplicate jar files to stage, the job
    * gets stuck. Before submitting the job we deduplicate the jar files here.
    */
-  public static List<String> deduplicateFilesToStage(DataflowPipelineOptions options) {
+  private static List<String> deduplicateFilesToStage(DataflowPipelineOptions options) {
     final Map<String, String> fileNameToPath = new HashMap<>();
     final List<String> filePaths =
         detectClassPathResourcesToStage(DataflowRunner.class.getClassLoader(), options);
