@@ -73,8 +73,8 @@ In this section we go over the Data Generator sample.
 The application specified in the `com.google.changestreams.sample.DataGeneratorMain` will perform the following:
 
 1. The user needs to provide a `project`, `instance` and `ldap`.
-2. It will retrieve a database with the id `<ldap>-hackhaton`. If this database does not exist it will be created.
-3. It will retrieve a table `Singers` within the `<ldap>-hackhaton` database. If this table does not exist it will be created. The `Singers` table schema is the following:
+2. It will retrieve a database with the id `<ldap>-hackaton`. If this database does not exist it will be created.
+3. It will retrieve a table `Singers` within the `<ldap>-hackaton` database. If this table does not exist it will be created. The `Singers` table schema is the following:
 
 ```sql
 CREATE TABLE Singers (
@@ -85,7 +85,7 @@ CREATE TABLE Singers (
   ) PRIMARY KEY (SingerId)
 ```
 
-4. It will retrieve a change stream with the name `<ldap>ChangeStream` within the `<ldap>-hackhaton` database. If the change stream does not exist it will be created. The `<ldap>ChangeStream` will be created as follows:
+4. It will retrieve a change stream with the name `<ldap>ChangeStream` within the `<ldap>-hackaton` database. If the change stream does not exist it will be created. The `<ldap>ChangeStream` will be created as follows:
 
 ```sql
 CREATE CHANGE STREAM <ldap>ChangeStream FOR Singers
