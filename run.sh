@@ -89,7 +89,7 @@ test ! "${REGION}" && echo "Missing region" && print_usage
 mvn \
   clean \
   compile \
-  exec:java -Dexec.mainClass=com.google.changestreams.sample.Main \
+  exec:java -Dexec.mainClass=com.google.changestreams.sample.PipelineMain \
   -Dexec.args=" \
     --project=${PROJECT} \
     --instance=${INSTANCE} \

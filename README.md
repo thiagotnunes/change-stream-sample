@@ -16,7 +16,7 @@ In this repository we show a sample Dataflow pipeline using the Cloud Spanner Ch
 
 ## Application
 
-The application specified in the `com.google.changestreams.Main` will perform the following:
+The application specified in the `com.google.changestreams.PipelineMain` will perform the following:
 
 1. It will read the specified change stream for 10 minutes of data (from now to 10 minutes in the future).
 2. It will extract the commit timestamps of each record streamed.

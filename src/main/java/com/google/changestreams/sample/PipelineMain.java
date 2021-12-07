@@ -37,7 +37,7 @@ import org.apache.beam.sdk.transforms.windowing.Window;
 import org.apache.beam.sdk.values.TypeDescriptors;
 import org.joda.time.Duration;
 
-public class Main {
+public class PipelineMain {
 
   public static void main(String[] args) {
     final SampleOptions options = PipelineOptionsFactory
