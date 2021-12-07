@@ -80,7 +80,7 @@ public class Main {
         // Maps records to strings (commit timestamp only)
         .apply(MapElements
             .into(TypeDescriptors.strings())
-            .via(record -> record.getCommitTimestamp().toString())
+            .via(record -> record.toString())
         )
 
         // Group records into 1 minute windows
