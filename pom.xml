@@ -14,6 +14,7 @@
     <beam.version>2.32.0</beam.version>
     <connector.version>2.33.0.1-SNAPSHOT</connector.version>
     <slf4j.version>1.7.25</slf4j.version>
+    <picocli.version>4.6.2</picocli.version>
   </properties>
 
   <dependencies>
@@ -38,6 +39,34 @@
       <version>${slf4j.version}</version>
       <scope>runtime</scope>
     </dependency>
+    <dependency>
+      <groupId>info.picocli</groupId>
+      <artifactId>picocli</artifactId>
+      <version>${picocli.version}</version>
+    </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <!-- annotationProcessorPaths requires maven-compiler-plugin version 3.5 or higher -->
+        <version>3.8.1</version>
+        <configuration>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>info.picocli</groupId>
+              <artifactId>picocli-codegen</artifactId>
+              <version>${picocli.version}</version>
+            </path>
+          </annotationProcessorPaths>
+          <compilerArgs>
+            <arg>-Aproject=${project.groupId}/${project.artifactId}</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>
 
