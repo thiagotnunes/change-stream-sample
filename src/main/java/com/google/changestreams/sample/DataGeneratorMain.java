@@ -40,9 +40,9 @@ import picocli.CommandLine.Option;
 @Command(name = "data-generation", mixinStandardHelpOptions = true,
     version = "data-generation 0.0.1",
     description = "Creates a Cloud Spanner database, tables and change stream if they do not exist. Generates load in the created resources.")
-public class DataGenerationMain implements Callable<Integer> {
+public class DataGeneratorMain implements Callable<Integer> {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(DataGenerationMain.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(DataGeneratorMain.class);
   private static final Duration TIMEOUT_DURATION = Duration.ofMinutes(5);
 
   @Option(
@@ -179,7 +179,7 @@ public class DataGenerationMain implements Callable<Integer> {
   }
 
   public static void main(String[] args) {
-    final int exitCode = new CommandLine(new DataGenerationMain()).execute(args);
+    final int exitCode = new CommandLine(new DataGeneratorMain()).execute(args);
     System.exit(exitCode);
   }
 }
