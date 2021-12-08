@@ -1,7 +1,21 @@
 # Change Streams Dataflow Sample
 
-In this repository we show a sample Dataflow pipeline using the Cloud Spanner Change Streams Connector.
-In this repository we also show a data generator class to generate load in a database, so you can test the Change Streams consumption.
+In this repository we show how to install the Connector jar, we show a sample Dataflow pipeline using the Cloud Spanner Change Streams Connector, and show a data generator class to generate load in a database, so you can test the Change Streams consumption.
+
+## TLDR
+
+```
+./install.sh # install the Connector jar
+
+# Creates <ldap>-hackathon database if not exists
+# Creates Singers table if not exists
+# Creates <ldap>ChangeStream to watch Singers if not exists
+# Generates 10 inserts, sleeps 1 second, repeats
+./run_data_generator.sh --default
+
+# Deploys Cloud Spanner Change Streams Connector sample pipeline in Dataflow
+./run_pipeline.sh --default
+```
 
 ## Connector
 
@@ -17,7 +31,15 @@ In this section we go over the Google Dataflow Connector sample.
     - The authenticated account must have access to update Cloud Spanner database ddl in project/metadata instance/metadata database used (more at [Cloud Spanner IAM](https://cloud.google.com/spanner/docs/iam)).
 - You must have set up [dataflow security and permissions](https://cloud.google.com/dataflow/docs/concepts/security-and-permissions#security_and_permissions_for_local_pipelines) correctly.
 - You must have pre-created a Cloud Spanner change stream to be read from.
-- You must have pre-installed the Apache Beam Connector jar. You can see the specified jar version in the application `pom.xml` file, under `connector.version`.
+- You must have pre-installed the Apache Beam Connector jar. You can see the specified jar version in the application `pom.xml` file, under `connector.version`. See the Installation step below.
+
+### Installation
+
+The following command will install the pre-built Connector jars, which can be found under the `artifacts` folder. This will make it possible to run the sample application.
+
+```shell
+./install.sh
+```
 
 ### Application
 
@@ -32,7 +54,7 @@ The application specified in the `com.google.changestreams.sample.PipelineMain` 
 
 We provided a bash script to facilitate the execution. You can execute it like so:
 
-```bash
+```shell
 ./run_pipeline.sh \
   --project <my-gcp-project> \
   --instance <my-spanner-instance> \
@@ -40,7 +62,7 @@ We provided a bash script to facilitate the execution. You can execute it like s
   --metadata-instance <my-spanner-metadata-instance> \
   --metadata-database <my-spanner-metadata-database> \
   --change-stream-name <my-spanner-change-stream-name> \
-  --gcs-bucket <my-gcs-bucket> \
+  --gcs-path <gs://my-gcs-path> \
   --region <my-dataflow-job-region>
 ```
 
@@ -52,7 +74,7 @@ This script will dispatch a remote job in dataflow with the specified configurat
 - `-mi|--metadata-instance`: the Google Cloud Spanner instance id where the Connector metadata tables will be created (we recommend it to be different than the change stream instance)
 - `-md|--metadata-database`: the Google Cloud Spanner database id where the Connector metadata tables will be created (we recommend it to be different than the change stream database)
 - `-c|--change-stream-name`: the name of the pre-created Google Cloud Spanner change stream
-- `-g|--gcs-bucket`: the Google Cloud Storage bucket to be used to store the results of the pipeline and to stage temp files for the Dataflow execution
+- `-g|--gcs-path`: the Google Cloud Storage path to be used to store the results of the pipeline and to stage temp files for the Dataflow execution
 - `-r|--region`: the region where to execute the Dataflow job (for options see [Dataflow Locations](https://cloud.google.com/dataflow/docs/resources/locations))
 
 The job executed here will spawn a single Dataflow worker to consume the change stream.
@@ -73,8 +95,8 @@ In this section we go over the Data Generator sample.
 The application specified in the `com.google.changestreams.sample.DataGeneratorMain` will perform the following:
 
 1. The user needs to provide a `project`, `instance` and `ldap`.
-2. It will retrieve a database with the id `<ldap>-hackaton`. If this database does not exist it will be created.
-3. It will retrieve a table `Singers` within the `<ldap>-hackaton` database. If this table does not exist it will be created. The `Singers` table schema is the following:
+2. It will retrieve a database with the id `<ldap>-hackathon`. If this database does not exist it will be created.
+3. It will retrieve a table `Singers` within the `<ldap>-hackathon` database. If this table does not exist it will be created. The `Singers` table schema is the following:
 
 ```sql
 CREATE TABLE Singers (
@@ -85,7 +107,7 @@ CREATE TABLE Singers (
   ) PRIMARY KEY (SingerId)
 ```
 
-4. It will retrieve a change stream with the name `<ldap>ChangeStream` within the `<ldap>-hackaton` database. If the change stream does not exist it will be created. The `<ldap>ChangeStream` will be created as follows:
+4. It will retrieve a change stream with the name `<ldap>ChangeStream` within the `<ldap>-hackathon` database. If the change stream does not exist it will be created. The `<ldap>ChangeStream` will be created as follows:
 
 ```sql
 CREATE CHANGE STREAM <ldap>ChangeStream FOR Singers
@@ -97,7 +119,7 @@ CREATE CHANGE STREAM <ldap>ChangeStream FOR Singers
 
 We provided a bash script for executing the application:
 
-```bash
+```shell
 ./run_data_generator.sh \
   --project <my-gcp-project> \
   --instance <my-spanner-instance> \

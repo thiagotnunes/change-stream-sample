@@ -52,13 +52,13 @@ public class PipelineMain {
     final String metadataInstanceId = options.getMetadataInstance();
     final String metadataDatabaseId = options.getMetadataDatabase();
     final String changeStreamName = options.getChangeStreamName();
-    final String gcsBucket = options.getGcsBucket();
+    final String gcsPath = options.getGcsPath();
     final Timestamp now = Timestamp.now();
     final Timestamp after10Minutes = Timestamp.ofTimeSecondsAndNanos(
         now.getSeconds() + (10 * 60),
         now.getNanos()
     );
-    final String gcsFilePrefix = "gs://" + gcsBucket + "/change-streams-sample/" + now + "/output";
+    final String gcsFilePrefix = gcsPath + "/output";
 
     pipeline
         // Reads from the change stream

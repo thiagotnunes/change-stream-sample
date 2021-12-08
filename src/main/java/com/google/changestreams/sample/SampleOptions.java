@@ -40,7 +40,7 @@ public interface SampleOptions extends DataflowPipelineOptions {
 
   void setChangeStreamName(String changeStreamName);
 
-  String getGcsBucket();
+  String getGcsPath();
 
-  void setGcsBucket(String gcsBucket);
+  void setGcsPath(String gcsPath);
 }
