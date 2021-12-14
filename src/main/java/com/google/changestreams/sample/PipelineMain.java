@@ -103,18 +103,8 @@ public class PipelineMain {
    * gets stuck. Before submitting the job we deduplicate the jar files here.
    */
   public static List<String> deduplicateFilesToStage(DataflowPipelineOptions options) {
-    final Map<String, String> fileNameToPath = new HashMap<>();
-    final List<String> filePaths =
-        detectClassPathResourcesToStage(DataflowRunner.class.getClassLoader(), options);
-
-    for (String filePath : filePaths) {
-      final File file = new File(filePath);
-      final String fileName = file.getName();
-      if (!fileNameToPath.containsKey(fileName)) {
-        fileNameToPath.put(fileName, filePath);
-      }
-    }
-
-    return new ArrayList<>(fileNameToPath.values());
+    return new FileDeduplicator().deduplicate(
+        detectClassPathResourcesToStage(DataflowRunner.class.getClassLoader(), options)
+    );
   }
 }
