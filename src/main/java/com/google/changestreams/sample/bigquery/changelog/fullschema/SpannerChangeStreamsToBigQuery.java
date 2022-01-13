@@ -1,0 +1,329 @@
+/*
+ * Copyright (C) 2022 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+package com.google.changestreams.sample.bigquery.changelog.fullschema;
+
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.model.Mod;
+import com.google.cloud.Timestamp;
+import com.google.cloud.teleport.v2.cdc.dlq.DeadLetterQueueManager;
+import com.google.cloud.teleport.v2.cdc.dlq.StringDeadLetterQueueSanitizer;
+import com.google.cloud.teleport.v2.coders.FailsafeElementCoder;
+import com.google.cloud.teleport.v2.transforms.DLQWriteTransform;
+import com.google.cloud.teleport.v2.values.FailsafeElement;
+import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
+import org.apache.beam.sdk.Pipeline;
+import org.apache.beam.sdk.PipelineResult;
+import org.apache.beam.sdk.coders.StringUtf8Coder;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
+import org.apache.beam.sdk.io.gcp.bigquery.InsertRetryPolicy;
+import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
+import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
+import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
+import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
+import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.options.ValueProvider;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.Flatten;
+import org.apache.beam.sdk.transforms.MapElements;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.PCollectionList;
+import org.apache.beam.sdk.values.PCollectionTuple;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.Set;
+
+public class SpannerChangeStreamsToBigQuery {
+
+  /**
+   * String/String Coder for FailsafeElement.
+   */
+  public static final FailsafeElementCoder<String, String> FAILSAFE_ELEMENT_CODER =
+    FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of());
+
+  private static final Logger LOG = LoggerFactory.getLogger(SpannerChangeStreamsToBigQuery.class);
+
+  /**
+   * Main entry point for executing the pipeline.
+   *
+   * @param args The command-line arguments to the pipeline.
+   */
+  public static void main(String[] args) {
+    LOG.info("Starting to replicate change records from Spanner Change Streams to BigQuery");
+
+    Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
+
+    options.setStreaming(true);
+    options.setEnableStreamingEngine(true);
+
+    validateOptions(options);
+    run(options).waitUntilFinish();
+  }
+
+  private static void validateOptions(Options options) {
+    final String startTimestampStr = options.getStartTimestamp();
+    final Timestamp startTimestamp = Timestamp.parseTimestamp(startTimestampStr);
+    final String endTimestampStr = options.getEndTimestamp();
+    if (!endTimestampStr.isEmpty()) {
+      final Timestamp endTimestamp = Timestamp.parseTimestamp(endTimestampStr);
+      if (startTimestamp.compareTo(endTimestamp) <= 0) {
+        throw new IllegalArgumentException(
+          "startTimestamp must be smaller than or equal to endTimestamp.");
+      }
+    }
+
+    if (options.getDlqRetryMinutes() <= 0) {
+      throw new IllegalArgumentException("dlqRetryMinutes must be positive.");
+    }
+  }
+
+  /**
+   * Runs the pipeline with the supplied options.
+   *
+   * @param options The execution parameters to the pipeline.
+   * @return The result of the pipeline execution.
+   */
+  public static PipelineResult run(Options options) {
+    /*
+     * Stages:
+     *   1) Read DataChangeRecord from Change Streams.
+     *   2) Create FailsafeElement of Mod JSON and merge from:
+     *       - DataChangeRecord.
+     *       - GCS Dead letter queue.
+     *   3) Convert Mod JSON into TableRow by reading from Spanner at Mod commit timestamp.
+     *   4) Append TableRow to BigQuery.
+     *   5) Write Failures from 2), 3) and 4) to GCS dead letter queue.
+     */
+
+    Pipeline pipeline = Pipeline.create(options);
+    DeadLetterQueueManager dlqManager = buildDlqManager(options);
+
+    String dlqDirectory = dlqManager.getRetryDlqDirectoryWithDateTime();
+    String tempDlqDirectory = dlqManager.getRetryDlqDirectory() + "tmp/";
+
+    Timestamp startTimestamp = Timestamp.parseTimestamp(options.getStartTimestamp());
+
+    /*
+     * Stage 1: Ingest and Normalize Data to FailsafeElement with JSON Strings
+     *   a) Read DataStream data from GCS into JSON String FailsafeElements (datastreamJsonRecords)
+     *   b) Reconsume Dead Letter Queue data from GCS into JSON String FailsafeElements
+     *     (dlqJsonRecords)
+     *   c) Flatten DataStream and DLQ Streams (jsonRecords)
+     */
+    SpannerIO.ReadChangeStream readChangeStream = SpannerIO
+      .readChangeStream()
+      .withSpannerConfig(
+        SpannerConfig
+          .create()
+          .withHost(ValueProvider.StaticValueProvider.of(options.getSpannerHost()))
+          .withProjectId(options.getProject())
+          .withInstanceId(options.getSpannerInstance())
+          .withDatabaseId(options.getSpannerDatabase()))
+      .withMetadataInstance(options.getSpannerMetadataInstance())
+      .withMetadataDatabase(options.getSpannerMetadataDatabase())
+      .withChangeStreamName(options.getChangeStreamName())
+      .withInclusiveStartAt(startTimestamp);
+
+    String endTimestampStr = options.getEndTimestamp();
+    if (!endTimestampStr.isEmpty()) {
+      readChangeStream = readChangeStream
+        .withInclusiveEndAt(Timestamp.parseTimestamp(endTimestampStr));
+    }
+
+    PCollection<DataChangeRecord> dataChangeRecord = pipeline
+      .apply("Read from Spanner Change Streams", readChangeStream);
+
+    PCollection<FailsafeElement<String, String>> sourceFailsafeModJson = dataChangeRecord
+      .apply("DataChangeRecord To Mod JSON",
+        ParDo.of(new DataChangeRecordToModJsonFn()))
+      .apply(
+        "Wrap Mod JSON In FailsafeElement",
+        ParDo.of(
+          new DoFn<String, FailsafeElement<String, String>>() {
+            @ProcessElement
+            public void process(
+              @Element String input,
+              OutputReceiver<FailsafeElement<String, String>> receiver) {
+              receiver.output(FailsafeElement.of(input, input));
+            }
+          }))
+      .setCoder(FAILSAFE_ELEMENT_CODER);
+
+    PCollectionTuple dlqModJson = dlqManager.getReconsumerDataTransform(
+      pipeline.apply(dlqManager.dlqReconsumer(options.getDlqRetryMinutes())));
+    PCollection<FailsafeElement<String, String>> retryableDlqFailsafeModJson =
+      dlqModJson
+        .get(DeadLetterQueueManager.RETRYABLE_ERRORS)
+        .setCoder(FAILSAFE_ELEMENT_CODER);
+
+    PCollection<FailsafeElement<String, String>> FailsafeModJson =
+      PCollectionList
+        .of(sourceFailsafeModJson)
+        .and(retryableDlqFailsafeModJson)
+        .apply("Merge Source And DLQ Mod JSON", Flatten.pCollections());
+
+    FailsafeModJsonToTableRowTransformer.FailsafeModJsonToTableRow failsafeModJsonToTableRow =
+      new FailsafeModJsonToTableRowTransformer.FailsafeModJsonToTableRow(
+        options.getProject(),
+        options.getSpannerInstance(),
+        options.getSpannerDatabase(),
+        options.getSpannerHost(),
+        options.getChangeStreamName(),
+        FAILSAFE_ELEMENT_CODER);
+
+    PCollectionTuple tableRowTuple =
+      FailsafeModJson.apply("Mod JSON To TableRow", failsafeModJsonToTableRow);
+
+    WriteResult writeResult = tableRowTuple.get(failsafeModJsonToTableRow.transformOut)
+      .apply("Write To BigQuery",
+        BigQueryIO.<TableRow>write()
+          .to(new BigQueryDynamicDestinations(
+            options.getProject(),
+            options.getSpannerInstance(),
+            options.getSpannerDatabase(),
+            options.getSpannerHost(),
+            options.getChangeStreamName(),
+            getBigQueryProject(options),
+            options.getBigQueryDataset(),
+            options.getBigQueryChangelogTableNameTemplate()))
+          .withFormatFunction(
+            element -> removeIntermediateMetadataFields(element))
+          .withFormatRecordOnFailureFunction(element -> element)
+          .withCreateDisposition(CreateDisposition.CREATE_IF_NEEDED)
+          .withWriteDisposition(Write.WriteDisposition.WRITE_APPEND)
+          .withExtendedErrorInfo()
+          .withMethod(Write.Method.STREAMING_INSERTS)
+          .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors()));
+
+    /*
+     * Stage 4: Write Failures to GCS Dead Letter Queue
+     */
+    PCollection<String> transformDlqJson =
+      tableRowTuple.get(failsafeModJsonToTableRow.transformDeadLetterOut)
+        .apply("Failed Mod JSON From Transform", MapElements.via(new StringDeadLetterQueueSanitizer()));
+
+    PCollection<String> bqWriteDlqJson =
+      writeResult
+        .getFailedInsertsWithErr()
+        .apply("Failed Mod JSON From BigQuery", MapElements.via(new BigQueryDeadLetterQueueSanitizer()));
+
+    PCollectionList.of(transformDlqJson)
+      .and(bqWriteDlqJson)
+      .apply("Merge Failed Mod JSON From Transform And BigQuery", Flatten.pCollections())
+      .apply(
+        "Write Failed Mod JSON To DLQ",
+        DLQWriteTransform.WriteDLQ.newBuilder()
+          .withDlqDirectory(dlqDirectory)
+          .withTmpDirectory(tempDlqDirectory)
+          .build());
+
+    PCollection<FailsafeElement<String, String>> nonRetryableDlqModJsonFailsafe =
+      dlqModJson
+        .get(DeadLetterQueueManager.PERMANENT_ERRORS)
+        .setCoder(FAILSAFE_ELEMENT_CODER);
+
+    nonRetryableDlqModJsonFailsafe
+      .apply(
+        "Write Mod JSON With Non-retryable Error To DLQ",
+        MapElements.via(new StringDeadLetterQueueSanitizer()))
+      .setCoder(StringUtf8Coder.of())
+      .apply(
+        DLQWriteTransform.WriteDLQ.newBuilder()
+          .withDlqDirectory(dlqManager.getSevereDlqDirectoryWithDateTime())
+          .withTmpDirectory(dlqManager.getSevereDlqDirectory() + "tmp/")
+          .build());
+
+    return pipeline.run();
+  }
+
+  private static DeadLetterQueueManager buildDlqManager(Options options) {
+    final String tempLocation =
+      options.as(DataflowPipelineOptions.class).getTempLocation().endsWith("/")
+        ? options.as(DataflowPipelineOptions.class).getTempLocation()
+        : options.as(DataflowPipelineOptions.class).getTempLocation() + "/";
+
+    final String dlqDirectory =
+      options.getDeadLetterQueueDirectory().isEmpty()
+        ? tempLocation + "dlq/"
+        : options.getDeadLetterQueueDirectory();
+
+    LOG.info("Dead letter queue directory: {}", dlqDirectory);
+    return DeadLetterQueueManager.create(dlqDirectory);
+  }
+
+  private static String getBigQueryProject(Options options) {
+    return options.getBigQueryProjectId().isEmpty()
+      ? options.getProject()
+      : options.getBigQueryProjectId();
+  }
+
+  /**
+   * Remove the following intermediate metadata fields that are not user data from TableRow:
+   * * _metadata_error.
+   * * _metadata_retry_count.
+   * * _metadata_spanner_original_payload_json.
+   */
+  private static TableRow removeIntermediateMetadataFields(TableRow tableRow) {
+    TableRow cleanTableRow = tableRow.clone();
+    final Set<String> rowKeys = tableRow.keySet();
+    final Set<String> metadataFields = SchemaUtils.getBigQueryIntermediateMetadataFieldNames();
+
+    for (String rowKey : rowKeys) {
+      if (metadataFields.contains(rowKey)) {
+        cleanTableRow.remove(rowKey);
+      }
+    }
+
+    return cleanTableRow;
+  }
+
+  // ModWithMetadata Json string is the original message that can be consumed by the pipeline.
+  static class DataChangeRecordToModJsonFn extends DoFn<DataChangeRecord, String> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DataChangeRecordToModJsonFn.class);
+
+    @ProcessElement
+    public void process(@Element DataChangeRecord input,
+                        OutputReceiver<String> receiver) {
+      for (org.apache.beam.sdk.io.gcp.spanner.changestreams.model.Mod changeStreamsMod : input.getMods()) {
+        Mod mod = new Mod(changeStreamsMod.getKeysJson(),
+          input.getCommitTimestamp(),
+          input.getServerTransactionId(),
+          input.isLastRecordInTransactionInPartition(),
+          input.getRecordSequence(),
+          input.getTableName(),
+          input.getModType(),
+          input.getNumberOfRecordsInTransaction(),
+          input.getNumberOfPartitionsInTransaction());
+
+        String modJsonString;
+
+        try {
+          modJsonString = mod.toJson();
+        } catch (IOException e) {
+          // Ignore exception and print bad format.
+          modJsonString = String.format("\"%s\"", input);
+        }
+        receiver.output(modJsonString);
+      }
+    }
+  }
+}

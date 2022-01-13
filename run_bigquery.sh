@@ -22,7 +22,6 @@ EOF
 if ! command -v mvn &>/dev/null; then
 	cat <<EOF
 Please install Maven!
-
 Linux:  sudo apt install -y maven
 Mac:  brew install maven
 EOF
