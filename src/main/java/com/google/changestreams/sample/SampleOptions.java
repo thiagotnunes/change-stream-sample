@@ -43,4 +43,12 @@ public interface SampleOptions extends DataflowPipelineOptions {
   String getGcsBucket();
 
   void setGcsBucket(String gcsBucket);
+
+  String getBigQueryDataset();
+
+  void setBigQueryDataset(String bigQueryDataset);
+
+  String getBigQueryTableName();
+
+  void setBigQueryTableName(String bigQueryTableName);
 }
