@@ -75,7 +75,7 @@ mvn \
     --bigQueryDataset=${BIG_QUERY_DATASET} \
     --bigQueryTableName=${BIG_QUERY_TABLE_NAME} \
     --runner=DataflowRunner \
-    --numWorkers=10 \
-    --maxNumWorkers=10 \
-    --experiments=use_unified_worker,use_runner_v2 \
+    --numWorkers=1 \
+    --maxNumWorkers=1 \
+    --experiments=use_runner_v2 \
   "

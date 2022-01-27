@@ -41,6 +41,7 @@ public class ReadFromText {
     options.setFilesToStage(deduplicateFilesToStage(options));
 
     options.setStreaming(true);
+    options.setEnableStreamingEngine(true);
 
     final Pipeline pipeline = Pipeline.create(options);
 
@@ -138,6 +139,9 @@ public class ReadFromText {
                 .withCreateDisposition(CreateDisposition.CREATE_IF_NEEDED)
                 .withWriteDisposition(Write.WriteDisposition.WRITE_APPEND)
                 .withSchema(createSchema())
+                // .optimizedWrites()
+                // .withAutoSharding()
+                // .withMethod(BigQueryIO.Write.Method.STORAGE_API_AT_LEAST_ONCE)
                 .withFormatFunction((Long seconds) ->
                     new TableRow()
                         .set(BQ_SCHEMA_NAME_PARTITION_TOKEN, UUID.randomUUID().toString())

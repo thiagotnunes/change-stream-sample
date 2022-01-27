@@ -23,7 +23,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
-import org.apache.beam.sdk.io.gcp.spanner.cdc.model.DataChangeRecord;
+import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
 import org.apache.beam.sdk.transforms.MapElements;
@@ -33,6 +33,7 @@ public class Main {
 
   private static final String BQ_SCHEMA_NAME_PARTITION_TOKEN = "partition_token";
   private static final String BQ_SCHEMA_NAME_TRANSACTION_ID = "server_transaction_id";
+  private static final String BQ_SCHEMA_NAME_RECORD = "record";
   private static final String BQ_SCHEMA_NAME_COMMIT_TIMESTAMP = "commit_timestamp";
   private static final String BQ_SCHEMA_NAME_EMIT_TIMESTAMP = "emit_timestamp";
   private static final String BQ_SCHEMA_NAME_BQ_TIMESTAMP = "bq_timestamp";
@@ -62,7 +63,6 @@ public class Main {
         .as(SampleOptions.class);
 
     options.setFilesToStage(deduplicateFilesToStage(options));
-    options.setEnableStreamingEngine(true);
     options.setStreaming(true);
 
     final Pipeline pipeline = Pipeline.create(options);
@@ -79,19 +79,10 @@ public class Main {
     final String bigQueryTable = String
         .format("%s:%s.%s", projectId, bigQueryDataset, bigQueryTableName);
 
-    // TODO uncomment when getting data records from Spanner
-    // Spanner spanner =
-    //     SpannerOptions.newBuilder()
-    //         .setProjectId(projectId)
-    //         .build()
-    //         .getService();
-    // DatabaseClient databaseClient = spanner
-    //     .getDatabaseClient(DatabaseId.of(projectId, instanceId, databaseId));
-
-    final Timestamp now = Timestamp.now();
-    final Timestamp after10Minutes = Timestamp.ofTimeSecondsAndNanos(
-        now.getSeconds() + (60 * 60),
-        now.getNanos()
+    final Timestamp inclusiveStartAt = Timestamp.now();
+    final Timestamp inclusiveEndAt = Timestamp.ofTimeSecondsAndNanos(
+        inclusiveStartAt.getSeconds() + (60 * 60),
+        inclusiveStartAt.getNanos()
     );
 
     pipeline
@@ -108,17 +99,10 @@ public class Main {
             .withMetadataInstance(metadataInstanceId)
             .withMetadataDatabase(metadataDatabaseId)
             .withChangeStreamName(changeStreamName)
-            .withInclusiveStartAt(now)
-            .withInclusiveEndAt(after10Minutes)
+            .withInclusiveStartAt(inclusiveStartAt)
+            .withInclusiveEndAt(inclusiveEndAt)
             .withTraceSampler(Samplers.alwaysSample())
         )
-
-        // Group records into 1 minute windows
-        // .apply(Window.into(FixedWindows.of(Duration.standardMinutes(10))))
-
-        // .apply("Filter to only records from the Users table", Filter.by(
-        //     (SerializableFunction<DataChangeRecord, Boolean>) record -> record.getTableName()
-        //         .equalsIgnoreCase("Users")))
 
         .apply("Add emitted time to records",
             MapElements.into(TypeDescriptor.of(RecordWithMetadata.class)).via(record -> {
@@ -129,24 +113,6 @@ public class Main {
                 }
             ))
 
-        // TODO map the change record mods into Spanner data records
-        // TODO handle updates, deletes, and inserts differently in BigQuery
-        // .apply("Get data records from Spanner", MapElements.into(TypeDescriptor.of(RecordWithMetadata.class)).via(
-        //     (SerializableFunction<RecordWithMetadata, RecordWithMetadata>) new SimpleFunction<RecordWithMetadata, RecordWithMetadata>() {
-        //       @Override
-        //       public RecordWithMetadata apply(RecordWithMetadata record) {
-        //         try (ResultSet resultSet =
-        //             databaseClient
-        //                 .singleUse(TimestampBound.ofReadTimestamp(record.dataChangeRecord.getCommitTimestamp()))
-        //                     .read(
-        //                         "Users", KeySet.singleKey(Key.newBuilder().append(record.dataChangeRecord.getMods().get(0).getKeysJson()).build()), Arrays.asList("SingerId", "AlbumId", "MarketingBudget"))) {
-        //           while (resultSet.next()) {
-        //
-        //           }
-        //         }
-        //       }
-        //     }))
-
         // Writes each window of records into BigQuery
         .apply("Write to BigQuery table",
             BigQueryIO
@@ -156,12 +122,15 @@ public class Main {
                 .withWriteDisposition(Write.WriteDisposition.WRITE_APPEND)
                 .withSchema(createSchema())
                 .withAutoSharding()
+                // Uncomment line below for BigQuery Storage Write API
+                // .withMethod(BigQueryIO.Write.Method.STORAGE_API_AT_LEAST_ONCE)
                 .optimizedWrites()
                 .withFormatFunction((RecordWithMetadata elem) ->
                     new TableRow()
                         .set(BQ_SCHEMA_NAME_PARTITION_TOKEN,
                             elem.dataChangeRecord.getPartitionToken())
                         .set(BQ_SCHEMA_NAME_TRANSACTION_ID, elem.dataChangeRecord.getServerTransactionId())
+                        .set(BQ_SCHEMA_NAME_RECORD, elem.dataChangeRecord.toString())
                         .set(BQ_SCHEMA_NAME_COMMIT_TIMESTAMP,
                             elem.dataChangeRecord.getCommitTimestamp().getSeconds())
                         .set(BQ_SCHEMA_NAME_EMIT_TIMESTAMP, elem.emittedTime.getSeconds())
