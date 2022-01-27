@@ -47,7 +47,7 @@ This script will dispatch a remote job in dataflow with the specified configurat
 - `-p|--project`: the Google Cloud Platform project id
 - `-i|--instance`: the Google Cloud Spanner instance id where the change stream resides
 - `-d|--database`: the Google Cloud Spanner database id where the change stream resides
-- `-mi|--metadata-instance`: the Google Cloud Spanner instance id where the Connector metadata tables will be created (we recommend it to be different than the change stream instance)
+- `-mi|--metadata-instance`: the Google Cloud Spanner instance id where the Connector metadata tables will be created
 - `-md|--metadata-database`: the Google Cloud Spanner database id where the Connector metadata tables will be created (we recommend it to be different than the change stream database)
 - `-c|--change-stream-name`: the name of the pre-created Google Cloud Spanner change stream
 - `-g|--gcs-bucket`: the Google Cloud Storage bucket to be used to store the results of the pipeline and to stage temp files for the Dataflow execution
@@ -77,7 +77,7 @@ This script will dispatch a remote job in dataflow with the specified configurat
 - `-p|--project`: the Google Cloud Platform project id
 - `-i|--instance`: the Google Cloud Spanner instance id where the change stream resides
 - `-d|--database`: the Google Cloud Spanner database id where the change stream resides
-- `-mi|--metadata-instance`: the Google Cloud Spanner instance id where the Connector metadata tables will be created (we recommend it to be different than the change stream instance)
+- `-mi|--metadata-instance`: the Google Cloud Spanner instance id where the Connector metadata tables will be created
 - `-md|--metadata-database`: the Google Cloud Spanner database id where the Connector metadata tables will be created (we recommend it to be different than the change stream database)
 - `-c|--change-stream-name`: the name of the pre-created Google Cloud Spanner change stream
 - `-g|--gcs-bucket`: the Google Cloud Storage bucket to be used to stage temp files for the Dataflow execution
