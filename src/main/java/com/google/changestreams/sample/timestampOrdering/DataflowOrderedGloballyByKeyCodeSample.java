@@ -110,13 +110,12 @@ public class DataflowOrderedGloballyByKeyCodeSample {
         .format("%s:%s.%s", projectId, bigQueryDataset, bigQueryTableName);
 
     final com.google.cloud.Timestamp inclusiveStartAt = com.google.cloud.Timestamp.now();
-    // final com.google.cloud.Timestamp inclusiveEndAt = com.google.cloud.Timestamp.ofTimeSecondsAndNanos(
-    //     inclusiveStartAt.getSeconds() + (60 * 60),
-    //     inclusiveStartAt.getNanos()
-    // );
+    final com.google.cloud.Timestamp inclusiveEndAt = com.google.cloud.Timestamp.ofTimeSecondsAndNanos(
+        inclusiveStartAt.getSeconds() + (10 * 60),
+        inclusiveStartAt.getNanos()
+    );
     final long timeIncrementInSeconds = 5;
 
-    // pipeline.apply(GenerateSequence.from(0))
     pipeline
         //Reads from the change stream
         .apply(SpannerIO
@@ -132,7 +131,7 @@ public class DataflowOrderedGloballyByKeyCodeSample {
             .withMetadataDatabase(metadataDatabaseId)
             .withChangeStreamName(changeStreamName)
             .withInclusiveStartAt(inclusiveStartAt)
-            // .withInclusiveEndAt(inclusiveEndAt)
+            .withInclusiveEndAt(inclusiveEndAt)
         )
         .apply(ParDo.of(new BreakRecordByModFn()))
         .apply(ParDo.of(new KeyByIdFn()))
@@ -149,8 +148,6 @@ public class DataflowOrderedGloballyByKeyCodeSample {
                 .withWriteDisposition(Write.WriteDisposition.WRITE_APPEND)
                 .withSchema(createSchema())
                 .withAutoSharding()
-                // Uncomment line below for BigQuery Storage Write API
-                // .withMethod(BigQueryIO.Write.Method.STORAGE_API_AT_LEAST_ONCE)
                 .optimizedWrites()
                 .withFormatFunction((RecordsOrderedWithinKey elem) ->
                     new TableRow()
