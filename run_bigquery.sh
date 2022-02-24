@@ -109,7 +109,6 @@ mvn \
     --metadataInstance=${METADATA_INSTANCE} \
     --metadataDatabase=${METADATA_DATABASE} \
     --changeStreamName=${CHANGE_STREAM_NAME} \
-    --gcsBucket=${GCS_BUCKET} \
     --gcpTempLocation=gs://${GCS_BUCKET}/temp \
     --region=${REGION} \
     --bigQueryDataset=${BIG_QUERY_DATASET} \
