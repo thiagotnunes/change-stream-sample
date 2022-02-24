@@ -1,22 +1,12 @@
 package com.google.changestreams.sample.bigquery;
 
-import static org.apache.beam.runners.core.construction.resources.PipelineResources.detectClassPathResourcesToStage;
-
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
-import io.opencensus.trace.samplers.Samplers;
-import java.io.File;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import org.apache.beam.runners.dataflow.DataflowRunner;
-import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write;
@@ -62,7 +52,6 @@ public class Main {
         .fromArgs(args)
         .as(SampleOptions.class);
 
-    options.setFilesToStage(deduplicateFilesToStage(options));
     options.setStreaming(true);
 
     final Pipeline pipeline = Pipeline.create(options);
@@ -166,25 +155,5 @@ public class Main {
                 .setMode("REQUIRED")
         )
     );
-  }
-
-  /**
-   * This is to avoid a bug in Dataflow, where if there are duplicate jar files to stage, the job
-   * gets stuck. Before submitting the job we deduplicate the jar files here.
-   */
-  private static List<String> deduplicateFilesToStage(DataflowPipelineOptions options) {
-    final Map<String, String> fileNameToPath = new HashMap<>();
-    final List<String> filePaths =
-        detectClassPathResourcesToStage(DataflowRunner.class.getClassLoader(), options);
-
-    for (String filePath : filePaths) {
-      final File file = new File(filePath);
-      final String fileName = file.getName();
-      if (!fileNameToPath.containsKey(fileName)) {
-        fileNameToPath.put(fileName, filePath);
-      }
-    }
-
-    return new ArrayList<>(fileNameToPath.values());
   }
 }

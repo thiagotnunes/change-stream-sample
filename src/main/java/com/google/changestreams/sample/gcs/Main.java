@@ -16,17 +16,8 @@
 
 package com.google.changestreams.sample.gcs;
 
-import static org.apache.beam.runners.core.construction.resources.PipelineResources.detectClassPathResourcesToStage;
-
 import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
-import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import org.apache.beam.runners.dataflow.DataflowRunner;
-import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
@@ -44,7 +35,6 @@ public class Main {
     final SampleOptions options = PipelineOptionsFactory
         .fromArgs(args)
         .as(SampleOptions.class);
-    options.setFilesToStage(deduplicateFilesToStage(options));
     final Pipeline pipeline = Pipeline.create(options);
 
     final String projectId = options.getProject();
@@ -97,25 +87,5 @@ public class Main {
         );
 
     pipeline.run().waitUntilFinish();
-  }
-
-  /**
-   * This is to avoid a bug in Dataflow, where if there are duplicate jar files to stage, the job
-   * gets stuck. Before submitting the job we deduplicate the jar files here.
-   */
-  public static List<String> deduplicateFilesToStage(DataflowPipelineOptions options) {
-    final Map<String, String> fileNameToPath = new HashMap<>();
-    final List<String> filePaths =
-        detectClassPathResourcesToStage(DataflowRunner.class.getClassLoader(), options);
-
-    for (String filePath : filePaths) {
-      final File file = new File(filePath);
-      final String fileName = file.getName();
-      if (!fileNameToPath.containsKey(fileName)) {
-        fileNameToPath.put(fileName, filePath);
-      }
-    }
-
-    return new ArrayList<>(fileNameToPath.values());
   }
 }
