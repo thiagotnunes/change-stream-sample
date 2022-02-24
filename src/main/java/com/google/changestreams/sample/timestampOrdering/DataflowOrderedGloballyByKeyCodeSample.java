@@ -9,6 +9,7 @@ import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
 import java.io.File;
 import java.io.Serializable;
+import java.lang.Math;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -110,6 +111,8 @@ public class DataflowOrderedGloballyByKeyCodeSample {
         .format("%s:%s.%s", projectId, bigQueryDataset, bigQueryTableName);
 
     final com.google.cloud.Timestamp inclusiveStartAt = com.google.cloud.Timestamp.now();
+
+    // For now, we have to set an end timestamp to this pipeline. End timestamp cannot be null.
     final com.google.cloud.Timestamp inclusiveEndAt = com.google.cloud.Timestamp.ofTimeSecondsAndNanos(
         inclusiveStartAt.getSeconds() + (10 * 60),
         inclusiveStartAt.getNanos()
@@ -136,7 +139,7 @@ public class DataflowOrderedGloballyByKeyCodeSample {
         .apply(ParDo.of(new BreakRecordByModFn()))
         .apply(ParDo.of(new KeyByIdFn()))
         .apply(
-            ParDo.of(new BufferKeyUntilOutputTimestamp(null, timeIncrementInSeconds)))
+            ParDo.of(new BufferKeyUntilOutputTimestamp(inclusiveEndAt, timeIncrementInSeconds)))
         .apply(ParDo.of(new CreateRecordWithMetadata()))
 
         // Writes each window of records into BigQuery
@@ -235,7 +238,8 @@ public class DataflowOrderedGloballyByKeyCodeSample {
       String keyString = record.getMods().get(0).getKeysJson();
       String keySubstring = keyString.substring(1, keyString.length() - 1);
       String[] arrayOfKeys = keySubstring.split(",", -1);
-      String keyPrefix = arrayOfKeys[0];
+      String keyPrefix = arrayOfKeys[arrayOfKeys.length - 1];
+
       outputReceiver.output(KV.of(keyPrefix, record));
     }
   }
@@ -259,16 +263,9 @@ public class DataflowOrderedGloballyByKeyCodeSample {
     private static final long serialVersionUID = 5050535558953049259L;
 
     private final long incrementIntervalInSeconds;
-    private final @Nullable Instant pipelineEndTime;
 
-    private BufferKeyUntilOutputTimestamp(
-        @Nullable com.google.cloud.Timestamp endTimestamp, long incrementIntervalInSeconds) {
+    private BufferKeyUntilOutputTimestamp(long incrementIntervalInSeconds) {
       this.incrementIntervalInSeconds = incrementIntervalInSeconds;
-      if (endTimestamp != null) {
-        this.pipelineEndTime = new Instant(endTimestamp.toSqlTimestamp());
-      } else {
-        pipelineEndTime = null;
-      }
     }
 
     @SuppressWarnings("unused")
@@ -373,7 +370,6 @@ public class DataflowOrderedGloballyByKeyCodeSample {
         LOG.info(
             "Timer not being set since the buffer is empty: ");
         keySeen.clear();
-        LOG.info("Wrote keyseen");
       }
     }
   }
