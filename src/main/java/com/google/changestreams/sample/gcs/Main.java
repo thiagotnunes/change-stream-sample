@@ -16,7 +16,6 @@
 
 package com.google.changestreams.sample.gcs;
 
-import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
@@ -32,9 +31,9 @@ import org.joda.time.Duration;
 public class Main {
 
   public static void main(String[] args) {
-    final SampleOptions options = PipelineOptionsFactory
+    final GcsPipelineOptions options = PipelineOptionsFactory
         .fromArgs(args)
-        .as(SampleOptions.class);
+        .as(GcsPipelineOptions.class);
     final Pipeline pipeline = Pipeline.create(options);
 
     final String projectId = options.getProject();
