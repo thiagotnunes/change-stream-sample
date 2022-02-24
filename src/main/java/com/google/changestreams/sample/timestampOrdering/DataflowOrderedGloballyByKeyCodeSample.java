@@ -139,7 +139,7 @@ public class DataflowOrderedGloballyByKeyCodeSample {
         .apply(ParDo.of(new BreakRecordByModFn()))
         .apply(ParDo.of(new KeyByIdFn()))
         .apply(
-            ParDo.of(new BufferKeyUntilOutputTimestamp(inclusiveEndAt, timeIncrementInSeconds)))
+            ParDo.of(new BufferKeyUntilOutputTimestamp(timeIncrementInSeconds)))
         .apply(ParDo.of(new CreateRecordWithMetadata()))
 
         // Writes each window of records into BigQuery
