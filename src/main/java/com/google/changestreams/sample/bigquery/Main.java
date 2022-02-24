@@ -101,7 +101,7 @@ public class Main {
             .withChangeStreamName(changeStreamName)
             .withInclusiveStartAt(inclusiveStartAt)
             .withInclusiveEndAt(inclusiveEndAt)
-            .withTraceSampler(Samplers.alwaysSample())
+            .withTraceSampleProbability(1D)
         )
 
         .apply("Add emitted time to records",
