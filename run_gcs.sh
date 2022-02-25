@@ -103,5 +103,5 @@ mvn \
     --runner=DataflowRunner \
     --numWorkers=1 \
     --maxNumWorkers=1 \
-    --experiments=use_unified_worker,use_runner_v2,runner_harness_container_image=gcr.io/cloud-dataflow/v1beta3/unified-harness:20211003-rc00 \
+    --experiments=use_runner_v2 \
   "
