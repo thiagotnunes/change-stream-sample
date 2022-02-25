@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,36 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.changestreams.sample;
+package com.google.changestreams.sample.bigquery;
 
-import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
+import com.google.changestreams.sample.ChangeStreamPipelineOptions;
 
-public interface SampleOptions extends DataflowPipelineOptions {
-
-  String getInstance();
-
-  void setInstance(String instance);
-
-  String getDatabase();
-
-  void setDatabase(String database);
-
-  String getMetadataInstance();
-
-  void setMetadataInstance(String metadataInstance);
-
-  String getMetadataDatabase();
-
-  void setMetadataDatabase(String metadataDatabase);
-
-  String getChangeStreamName();
-
-  void setChangeStreamName(String changeStreamName);
-
-  String getGcsBucket();
-
-  void setGcsBucket(String gcsBucket);
-
+public interface BigQuerySampleOptions extends ChangeStreamPipelineOptions {
   String getBigQueryDataset();
 
   void setBigQueryDataset(String bigQueryDataset);

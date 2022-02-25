@@ -4,7 +4,7 @@ set -e
 
 function print_usage() {
   cat <<EOF
-Usage: ./run_gcs.sh
+Usage: ./run_pubsub.sh
   -p <project>
   -i <instance>
   -d <database>
@@ -12,6 +12,7 @@ Usage: ./run_gcs.sh
   -md <metadata database>
   -c <change stream name>
   -g <gcs bucket>
+  -t <pubsub topic>
   -r <job region>
 EOF
   exit
@@ -65,6 +66,11 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    -t|--pubsub-topic)
+      PUBSUB_TOPIC="$2"
+      shift
+      shift
+      ;;
     -r|--region)
       REGION="$2"
       shift
@@ -84,12 +90,13 @@ test ! "${METADATA_INSTANCE}" && echo "Missing metadata-instance" && print_usage
 test ! "${METADATA_DATABASE}" && echo "Missing metadata-database" && print_usage
 test ! "${CHANGE_STREAM_NAME}" && echo "Missing change-stream-name" && print_usage
 test ! "${GCS_BUCKET}" && echo "Missing gcs-bucket" && print_usage
+test ! "${PUBSUB_TOPIC}" && echo "Missing pubsub-topic" && print_usage
 test ! "${REGION}" && echo "Missing region" && print_usage
 
 mvn \
   clean \
   compile \
-  exec:java -Dexec.mainClass=com.google.changestreams.sample.gcs.Main \
+  exec:java -Dexec.mainClass=com.google.changestreams.sample.pubsub.Main \
   -Dexec.cleanupDaemonThreads=false \
   -Dexec.args=" \
     --project=${PROJECT} \
@@ -98,7 +105,7 @@ mvn \
     --metadataInstance=${METADATA_INSTANCE} \
     --metadataDatabase=${METADATA_DATABASE} \
     --changeStreamName=${CHANGE_STREAM_NAME} \
-    --gcsBucket=${GCS_BUCKET} \
+    --pubsubTopic=${PUBSUB_TOPIC} \
     --gcpTempLocation=gs://${GCS_BUCKET}/temp \
     --region=${REGION} \
     --runner=DataflowRunner \

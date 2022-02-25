@@ -4,7 +4,7 @@ set -e
 
 function print_usage() {
   cat <<EOF
-Usage: ./run.sh
+Usage: ./run_bigquery.sh
   -p <project>
   -i <instance>
   -d <database>
@@ -102,6 +102,7 @@ mvn \
   clean \
   compile \
   exec:java -Dexec.mainClass=com.google.changestreams.sample.bigquery.Main \
+  -Dexec.cleanupDaemonThreads=false \
   -Dexec.args=" \
     --project=${PROJECT} \
     --instance=${INSTANCE} \
@@ -109,7 +110,6 @@ mvn \
     --metadataInstance=${METADATA_INSTANCE} \
     --metadataDatabase=${METADATA_DATABASE} \
     --changeStreamName=${CHANGE_STREAM_NAME} \
-    --gcsBucket=${GCS_BUCKET} \
     --gcpTempLocation=gs://${GCS_BUCKET}/temp \
     --region=${REGION} \
     --bigQueryDataset=${BIG_QUERY_DATASET} \

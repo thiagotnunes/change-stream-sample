@@ -3,7 +3,6 @@ package com.google.changestreams.sample.bigquery;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
-import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
 import java.io.Serializable;
 import java.util.Arrays;
@@ -48,9 +47,9 @@ public class Main {
 
   public static void main(String[] args) {
 
-    final SampleOptions options = PipelineOptionsFactory
+    final BigQuerySampleOptions options = PipelineOptionsFactory
         .fromArgs(args)
-        .as(SampleOptions.class);
+        .as(BigQuerySampleOptions.class);
 
     options.setStreaming(true);
 

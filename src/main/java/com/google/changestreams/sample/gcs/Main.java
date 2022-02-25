@@ -16,12 +16,12 @@
 
 package com.google.changestreams.sample.gcs;
 
-import com.google.changestreams.sample.SampleOptions;
 import com.google.cloud.Timestamp;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
+import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
@@ -32,9 +32,9 @@ import org.joda.time.Duration;
 public class Main {
 
   public static void main(String[] args) {
-    final SampleOptions options = PipelineOptionsFactory
+    final GcsPipelineOptions options = PipelineOptionsFactory
         .fromArgs(args)
-        .as(SampleOptions.class);
+        .as(GcsPipelineOptions.class);
     final Pipeline pipeline = Pipeline.create(options);
 
     final String projectId = options.getProject();
@@ -68,10 +68,10 @@ public class Main {
             .withInclusiveEndAt(after10Minutes)
         )
 
-        // Maps records to strings (commit timestamp only)
+        // Maps records to strings
         .apply(MapElements
             .into(TypeDescriptors.strings())
-            .via(record -> record.getCommitTimestamp().toString())
+            .via(DataChangeRecord::toString)
         )
 
         // Group records into 1 minute windows
