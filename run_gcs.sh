@@ -4,7 +4,7 @@ set -e
 
 function print_usage() {
   cat <<EOF
-Usage: ./run.sh
+Usage: ./run_gcs.sh
   -p <project>
   -i <instance>
   -d <database>
