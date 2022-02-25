@@ -102,6 +102,7 @@ mvn \
   clean \
   compile \
   exec:java -Dexec.mainClass=com.google.changestreams.sample.bigquery.Main \
+  -Dexec.cleanupDaemonThreads=false \
   -Dexec.args=" \
     --project=${PROJECT} \
     --instance=${INSTANCE} \
