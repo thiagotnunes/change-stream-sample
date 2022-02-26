@@ -86,3 +86,37 @@ This script will dispatch a remote job in dataflow with the specified configurat
 - `-r|--region`: the region where to execute the Dataflow job (for options see [Dataflow Locations](https://cloud.google.com/dataflow/docs/resources/locations))
 
 The job executed here will spawn a single Dataflow worker to consume the change stream.
+
+### Dataflow Ordering By Key Sample
+For the dataflow ordering by key sample, you can execute the script like so:
+
+```bash
+./run_timestamp_sample.sh \
+  --project <my-gcp-project> \
+  --instance <my-spanner-instance> \
+  --database <my-spanner-database> \
+  --metadata-instance <my-spanner-metadata-instance> \
+  --metadata-database <my-spanner-metadata-database> \
+  --change-stream-name <my-spanner-change-stream-name> \
+  --gcs-bucket <my-gcs-bucket> \
+  --big-query-dataset <my-big-query-dataset> \
+  --big-query-table-name <my-big-query-table-name> \
+  --region <my-dataflow-job-region>
+```
+
+This script will dispatch a remote job in dataflow with the specified configuration:
+
+- `-p|--project`: the Google Cloud Platform project id
+- `-i|--instance`: the Google Cloud Spanner instance id where the change stream resides
+- `-d|--database`: the Google Cloud Spanner database id where the change stream resides
+- `-mi|--metadata-instance`: the Google Cloud Spanner instance id where the Connector metadata tables will be created
+- `-md|--metadata-database`: the Google Cloud Spanner database id where the Connector metadata tables will be created (we recommend it to be different than the change stream database)
+- `-c|--change-stream-name`: the name of the pre-created Google Cloud Spanner change stream
+- `-g|--gcs-bucket`: the Google Cloud Storage bucket to be used to stage temp files for the Dataflow execution
+- `-bd|--big-query-dataset`: the BigQuery dataset to store the records emitted by the change stream
+- `-bt|--big-query-table-name`: the BigQuery table name in the big query dataset to store the records emitted by the change stream
+- `-r|--region`: the region where to execute the Dataflow job (for options see [Dataflow Locations](https://cloud.google.com/dataflow/docs/resources/locations))
+
+The job executed here will spawn a single Dataflow worker to consume the change stream.
+
+For experimentation purposes, you can also tweak the numWorkers specified in run_timestamp_sample.sh to lower or increase the number of Dataflow workers used.
