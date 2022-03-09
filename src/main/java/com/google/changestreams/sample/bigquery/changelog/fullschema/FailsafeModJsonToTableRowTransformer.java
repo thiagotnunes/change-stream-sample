@@ -19,7 +19,9 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.model.Mod;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.model.SpannerColumn;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.model.SpannerTable;
-import com.google.cloud.Timestamp;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.BigQueryUtils;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.SpannerToBigQueryUtils;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.SpannerUtils;
 import com.google.cloud.spanner.*;
 import com.google.cloud.spanner.Key.Builder;
 import com.google.cloud.spanner.Options;
@@ -39,7 +41,6 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -118,6 +119,7 @@ public class FailsafeModJsonToTableRowTransformer {
       public TupleTag<TableRow> transformOut;
       public TupleTag<FailsafeElement<String, String>> transformDeadLetterOut;
       private Map<String, SpannerTable> spannerTableByName = null;
+      private Spanner spanner;
       private DatabaseClient spannerDatabaseClient;
 
       public FailsafeModJsonToTableRowFn(
@@ -139,16 +141,21 @@ public class FailsafeModJsonToTableRowTransformer {
 
       @Setup
       public void setUp() {
-        this.spannerDatabaseClient =
-          SpannerOptions.newBuilder()
-            .setHost(spannerHost)
-            .setProjectId(spannerProject)
-            .build()
-            .getService()
-            .getDatabaseClient(DatabaseId.of(spannerProject, spannerInstance, spannerDatabase));
+        this.spanner = SpannerOptions.newBuilder()
+          .setHost(spannerHost)
+          .setProjectId(spannerProject)
+          .build()
+          .getService();
+        this.spannerDatabaseClient = spanner.getDatabaseClient(
+          DatabaseId.of(spannerProject, spannerInstance, spannerDatabase));
 
-        spannerTableByName = SchemaUtils.getSpannerTableByName(
+        spannerTableByName = SpannerUtils.getSpannerTableByName(
           spannerDatabaseClient, changeStreamsName);
+      }
+
+      @Teardown
+      public void tearDown() {
+        spanner.close();
       }
 
       @ProcessElement
@@ -158,7 +165,7 @@ public class FailsafeModJsonToTableRowTransformer {
         try {
           final TableRow tableRow = modJsonStringToTableRow(failsafeModJsonString.getPayload());
           context.output(tableRow);
-        } catch (IOException e) {
+        } catch (Exception e) {
           context.output(
             transformDeadLetterOut,
             FailsafeElement.of(failsafeModJsonString)
@@ -167,9 +174,9 @@ public class FailsafeModJsonToTableRowTransformer {
         }
       }
 
-      private TableRow modJsonStringToTableRow(String modJsonString) throws IOException {
+      private TableRow modJsonStringToTableRow(String modJsonString) throws Exception {
         ObjectNode modObjectNode = (ObjectNode) new ObjectMapper().readTree(modJsonString);
-        for (final String excludeFieldName : SchemaUtils.getBigQueryIntermediateMetadataFieldNames()) {
+        for (final String excludeFieldName : BigQueryUtils.getBigQueryIntermediateMetadataFieldNames()) {
           if (modObjectNode.has(excludeFieldName)) {
             modObjectNode.remove(excludeFieldName);
           }
@@ -183,21 +190,21 @@ public class FailsafeModJsonToTableRowTransformer {
             .ofTimeSecondsAndNanos(mod.getCommitTimestampSeconds(), mod.getCommitTimestampNanos());
 
         TableRow tableRow = new TableRow();
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_ORIGINAL_PAYLOAD_JSON, modJsonString);
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_MOD_TYPE, mod.getModType().name());
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME, spannerTableName);
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_SPANNER_COMMIT_TIMESTAMP,
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_ORIGINAL_PAYLOAD_JSON, modJsonString);
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_MOD_TYPE, mod.getModType().name());
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME, spannerTableName);
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_SPANNER_COMMIT_TIMESTAMP,
           spannerCommitTimestamp.toString());
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_SERVER_TRANSACTION_ID,
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_SERVER_TRANSACTION_ID,
           mod.getServerTransactionId());
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_RECORD_SEQUENCE, mod.getRecordSequence());
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_IS_LAST_RECORD_IN_TRANSACTION_IN_PARTITION,
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_RECORD_SEQUENCE, mod.getRecordSequence());
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_IS_LAST_RECORD_IN_TRANSACTION_IN_PARTITION,
           mod.getIsLastRecordInTransactionInPartition());
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_RECORDS_IN_TRANSACTION,
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_RECORDS_IN_TRANSACTION,
           mod.getNumberOfRecordsInTransaction());
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_PARTITIONS_IN_TRANSACTION,
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_PARTITIONS_IN_TRANSACTION,
           mod.getNumberOfPartitionsInTransaction());
-        tableRow.set(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_BIGQUERY_COMMIT_TIMESTAMP, "AUTO");
+        tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_BIGQUERY_COMMIT_TIMESTAMP, "AUTO");
 
         JSONObject keysJsonObject = new JSONObject(mod.getKeysJson());
         Builder keyBuilder = com.google.cloud.spanner.Key.newBuilder();
@@ -206,7 +213,7 @@ public class FailsafeModJsonToTableRowTransformer {
           // TODO: Test the case where some keys are null/empty from Mod.
           if (keysJsonObject.has(spannerColumnName)) {
             tableRow.set(spannerColumnName, keysJsonObject.get(spannerColumnName));
-            SchemaUtils.appendToSpannerKey(spannerColumn, keysJsonObject, keyBuilder);
+            SpannerUtils.appendToSpannerKey(spannerColumn, keysJsonObject, keyBuilder);
           }
         }
 
@@ -218,14 +225,16 @@ public class FailsafeModJsonToTableRowTransformer {
 
         final Options.ReadQueryUpdateTransactionOption options = Options.priority(
           Options.RpcPriority.HIGH);
-        final ResultSet resultSet =
+        try (final ResultSet resultSet =
           spannerDatabaseClient
-            .singleUse(TimestampBound.ofReadTimestamp(spannerCommitTimestamp))
+            .singleUseReadOnlyTransaction(TimestampBound.ofReadTimestamp(spannerCommitTimestamp))
             .read(
               spannerTable.getTableName(),
               KeySet.singleKey(keyBuilder.build()),
-              spannerNonPkColumnNames, options);
-        SchemaUtils.spannerSnapshotRowToBigQueryTableRow(resultSet, spannerNonPkColumns, tableRow);
+              spannerNonPkColumnNames, options)) {
+          SpannerToBigQueryUtils.spannerSnapshotRowToBigQueryTableRow(
+            resultSet, spannerNonPkColumns, tableRow);
+        }
 
         return tableRow;
       }

@@ -20,11 +20,15 @@ import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.model.SpannerTable;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.BigQueryUtils;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.SpannerToBigQueryUtils;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.SpannerUtils;
 import com.google.cloud.bigquery.Field;
 import com.google.cloud.bigquery.StandardSQLTypeName;
 import com.google.cloud.bigquery.TableId;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.DatabaseId;
+import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.teleport.v2.transforms.BigQueryConverters;
 import org.apache.beam.sdk.io.gcp.bigquery.DynamicDestinations;
@@ -49,15 +53,16 @@ public class BigQueryDynamicDestinations extends DynamicDestinations<TableRow, K
     String bigQueryProject,
     String bigQueryDataset,
     String bigQueryTableTemplate) {
-    final DatabaseClient spannerDatabaseClient =
-      SpannerOptions.newBuilder()
-        .setHost(spannerHost)
-        .setProjectId(spannerProject)
-        .build()
-        .getService()
-        .getDatabaseClient(DatabaseId.of(spannerProject, spannerInstance, spannerDatabase));
-    spannerTableByName = SchemaUtils.getSpannerTableByName(
+    Spanner spanner = SpannerOptions.newBuilder()
+      .setHost(spannerHost)
+      .setProjectId(spannerProject)
+      .build()
+      .getService();
+    final DatabaseClient spannerDatabaseClient = spanner.getDatabaseClient(
+      DatabaseId.of(spannerProject, spannerInstance, spannerDatabase));
+    spannerTableByName = SpannerUtils.getSpannerTableByName(
       spannerDatabaseClient, changeStreamName);
+    spanner.close();
     this.bigQueryProject = bigQueryProject;
     this.bigQueryDataset = bigQueryDataset;
     this.bigQueryTableTemplate = bigQueryTableTemplate;
@@ -88,49 +93,49 @@ public class BigQueryDynamicDestinations extends DynamicDestinations<TableRow, K
   @Override
   public TableSchema getSchema(KV<TableId, TableRow> destination) {
     final TableRow tableRow = destination.getValue();
-    final String spannerTableName = (String) tableRow.get(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME);
+    final String spannerTableName = (String) tableRow.get(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME);
     final SpannerTable spannerTable = spannerTableByName.get(spannerTableName);
 
-    List<TableFieldSchema> fields = SchemaUtils.spannerColumnsToBigQueryIOFields(
+    List<TableFieldSchema> fields = SpannerToBigQueryUtils.spannerColumnsToBigQueryIOFields(
       spannerTable.getAllColumns());
 
     // Add all metadata fields.
     final String requiredMode = Field.Mode.REQUIRED.name();
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_MOD_TYPE)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_MOD_TYPE)
         .setType(StandardSQLTypeName.STRING.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME)
         .setType(StandardSQLTypeName.STRING.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_SPANNER_COMMIT_TIMESTAMP)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_SPANNER_COMMIT_TIMESTAMP)
         .setType(StandardSQLTypeName.TIMESTAMP.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_SERVER_TRANSACTION_ID)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_SERVER_TRANSACTION_ID)
         .setType(StandardSQLTypeName.STRING.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_RECORD_SEQUENCE)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_RECORD_SEQUENCE)
         .setType(StandardSQLTypeName.STRING.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_IS_LAST_RECORD_IN_TRANSACTION_IN_PARTITION)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_IS_LAST_RECORD_IN_TRANSACTION_IN_PARTITION)
         .setType(StandardSQLTypeName.BOOL.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_RECORDS_IN_TRANSACTION)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_RECORDS_IN_TRANSACTION)
         .setType(StandardSQLTypeName.INT64.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_PARTITIONS_IN_TRANSACTION)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_NUMBER_OF_PARTITIONS_IN_TRANSACTION)
         .setType(StandardSQLTypeName.INT64.name()).setMode(requiredMode));
     fields
       .add(new TableFieldSchema()
-        .setName(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_BIGQUERY_COMMIT_TIMESTAMP)
+        .setName(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_BIGQUERY_COMMIT_TIMESTAMP)
         .setType(StandardSQLTypeName.TIMESTAMP.name()).setMode(requiredMode));
 
     return new TableSchema().setFields(fields);

@@ -3,6 +3,8 @@ package com.google.changestreams.sample.bigquery.changelog.fullschema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.model.SpannerColumn;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.model.SpannerTable;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.SpannerToBigQueryUtils;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.SpannerUtils;
 import com.google.cloud.ByteArray;
 import com.google.cloud.Date;
 import com.google.cloud.Timestamp;
@@ -70,7 +72,7 @@ public class SchemaUtilsTest {
     final String sql = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = \"\"";
 
     when(mockReadContext.executeQuery(
-      Statement.newBuilder(sql).build())).thenReturn(
+      Statement.of(sql))).thenReturn(
       ResultSets.forRows(Type.struct(
           Type.StructField.of("TABLE_NAME", Type.string())),
         Arrays.asList(
@@ -125,7 +127,7 @@ public class SchemaUtilsTest {
     }
 
     when(mockReadContext.executeQuery(
-      Statement.newBuilder(sql).build())).thenReturn(
+      Statement.of(sql))).thenReturn(
       ResultSets.forRows(Type.struct(
           Type.StructField.of("TABLE_NAME", Type.string()),
           Type.StructField.of("COLUMN_NAME", Type.string()),
@@ -177,8 +179,7 @@ public class SchemaUtilsTest {
     }
 
     when(mockReadContext.executeQuery(
-      Statement.newBuilder(sql)
-        .build())).thenReturn(
+      Statement.of(sql))).thenReturn(
       ResultSets.forRows(Type.struct(
         Type.StructField.of("TABLE_NAME", Type.string()),
         Type.StructField.of("COLUMN_NAME", Type.string()),
@@ -239,7 +240,7 @@ public class SchemaUtilsTest {
     expectedSpannerTableByName.put(
       "Albums", new SpannerTable("Albums", albumsPkColumns, albumsNonPkColumns));
     assertEquals(expectedSpannerTableByName,
-      SchemaUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
+      SpannerUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
   }
 
   /**
@@ -274,7 +275,7 @@ public class SchemaUtilsTest {
     expectedSpannerTableByName.put(
       "Singers", new SpannerTable("Singers", singersPkColumns, singersNonPkColumns));
     assertEquals(expectedSpannerTableByName,
-      SchemaUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
+      SpannerUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
   }
 
   /**
@@ -317,7 +318,7 @@ public class SchemaUtilsTest {
     expectedSpannerTableByName.put(
       "Singers", new SpannerTable("Singers", singersPkColumns, singersNonPkColumns));
     assertEquals(expectedSpannerTableByName,
-      SchemaUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
+      SpannerUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
   }
 
   @Test
@@ -397,7 +398,8 @@ public class SchemaUtilsTest {
       )
     );
 
-    SchemaUtils.spannerSnapshotRowToBigQueryTableRow(resultSet, spannerColumnsOfAllTypes, tableRow);
+    SpannerToBigQueryUtils.spannerSnapshotRowToBigQueryTableRow(
+      resultSet, spannerColumnsOfAllTypes, tableRow);
     assertEquals(
       "GenericData{classInfo=[f], " +
         "{BoolCol=true, BytesCol=MTIz, DateCol=2022-01-22, Float64Col=1.2, Int64Col=20, " +
@@ -435,7 +437,7 @@ public class SchemaUtilsTest {
       if (typeName.equals("ARRAY") || typeName.equals("JSON")) {
         continue;
       }
-      SchemaUtils.appendToSpannerKey(spannerColumn, keysJsonObject, keyBuilder);
+      SpannerUtils.appendToSpannerKey(spannerColumn, keysJsonObject, keyBuilder);
     }
     assertEquals("[true,MTIz,2022-01-22,1.2,20," +
         "3.14159200000000016217427400988526642322540283203125,abc,2022-03-07T01:50:53.972000000Z]",
@@ -444,7 +446,7 @@ public class SchemaUtilsTest {
 
   @Test
   public void testSpannerColumnsToBigQueryIOFields() {
-    String bigQueryIOFieldsStr = SchemaUtils.spannerColumnsToBigQueryIOFields(
+    String bigQueryIOFieldsStr = SpannerToBigQueryUtils.spannerColumnsToBigQueryIOFields(
       spannerColumnsOfAllTypes).toString();
     // Remove redundant information.
     bigQueryIOFieldsStr = bigQueryIOFieldsStr.replace(

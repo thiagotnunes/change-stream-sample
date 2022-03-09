@@ -16,6 +16,7 @@
 package com.google.changestreams.sample.bigquery.changelog.fullschema;
 
 import com.google.api.services.bigquery.model.TableRow;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.BigQueryUtils;
 import com.google.cloud.teleport.v2.cdc.dlq.DeadLetterQueueSanitizer;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
 import org.slf4j.Logger;
@@ -29,15 +30,14 @@ import org.slf4j.LoggerFactory;
 public class BigQueryDeadLetterQueueSanitizer
   extends DeadLetterQueueSanitizer<BigQueryInsertError, String> {
 
-  private static final Logger LOG = LoggerFactory.getLogger(BigQueryDeadLetterQueueSanitizer.class);
-
   public BigQueryDeadLetterQueueSanitizer() {}
 
   @Override
   public String getJsonMessage(BigQueryInsertError input) {
     final TableRow tableRow = input.getRow();
     // Extract the original payload from the TableRow.
-    final String message = (String) tableRow.get(SchemaUtils.BQ_CHANGELOG_FIELD_NAME_ORIGINAL_PAYLOAD_JSON);
+    final String message = (String) tableRow.get(
+      BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_ORIGINAL_PAYLOAD_JSON);
     return message;
   }
 

@@ -18,6 +18,7 @@ package com.google.changestreams.sample.bigquery.changelog.fullschema;
 
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.model.Mod;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.BigQueryUtils;
 import com.google.cloud.Timestamp;
 import com.google.cloud.teleport.v2.cdc.dlq.DeadLetterQueueManager;
 import com.google.cloud.teleport.v2.cdc.dlq.StringDeadLetterQueueSanitizer;
@@ -38,10 +39,7 @@ import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
 import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.ValueProvider;
-import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.Flatten;
-import org.apache.beam.sdk.transforms.MapElements;
-import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.*;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionList;
 import org.apache.beam.sdk.values.PCollectionTuple;
@@ -84,7 +82,7 @@ public class SpannerChangeStreamsToBigQuery {
     final String endTimestampStr = options.getEndTimestamp();
     if (!endTimestampStr.isEmpty()) {
       final Timestamp endTimestamp = Timestamp.parseTimestamp(endTimestampStr);
-      if (startTimestamp.compareTo(endTimestamp) <= 0) {
+      if (startTimestamp.compareTo(endTimestamp) < 0) {
         throw new IllegalArgumentException(
           "startTimestamp must be smaller than or equal to endTimestamp.");
       }
@@ -149,7 +147,8 @@ public class SpannerChangeStreamsToBigQuery {
     }
 
     PCollection<DataChangeRecord> dataChangeRecord = pipeline
-      .apply("Read from Spanner Change Streams", readChangeStream);
+      .apply("Read from Spanner Change Streams", readChangeStream)
+      .apply("Reshuffle DataChangeRecord", Reshuffle.viaRandomKey());
 
     PCollection<FailsafeElement<String, String>> sourceFailsafeModJson = dataChangeRecord
       .apply("DataChangeRecord To Mod JSON",
@@ -284,7 +283,7 @@ public class SpannerChangeStreamsToBigQuery {
   private static TableRow removeIntermediateMetadataFields(TableRow tableRow) {
     TableRow cleanTableRow = tableRow.clone();
     final Set<String> rowKeys = tableRow.keySet();
-    final Set<String> metadataFields = SchemaUtils.getBigQueryIntermediateMetadataFieldNames();
+    final Set<String> metadataFields = BigQueryUtils.getBigQueryIntermediateMetadataFieldNames();
 
     for (String rowKey : rowKeys) {
       if (metadataFields.contains(rowKey)) {
@@ -298,12 +297,11 @@ public class SpannerChangeStreamsToBigQuery {
   // ModWithMetadata Json string is the original message that can be consumed by the pipeline.
   static class DataChangeRecordToModJsonFn extends DoFn<DataChangeRecord, String> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(DataChangeRecordToModJsonFn.class);
-
     @ProcessElement
     public void process(@Element DataChangeRecord input,
                         OutputReceiver<String> receiver) {
-      for (org.apache.beam.sdk.io.gcp.spanner.changestreams.model.Mod changeStreamsMod : input.getMods()) {
+      for (org.apache.beam.sdk.io.gcp.spanner.changestreams.model.Mod changeStreamsMod
+        : input.getMods()) {
         Mod mod = new Mod(changeStreamsMod.getKeysJson(),
           input.getCommitTimestamp(),
           input.getServerTransactionId(),
