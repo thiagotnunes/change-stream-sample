@@ -45,12 +45,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Class {@link FailsafeModJsonToTableRowTransformer} provides methods that convert a {@link Mod}
+ * wrapped in {@link FailsafeElement} to a {@link TableRow}.
+ */
 public class FailsafeModJsonToTableRowTransformer {
-  /* Logger for class. */
-  private static final Logger LOG = LoggerFactory.getLogger(FailsafeModJsonToTableRowTransformer.class);
-
   /**
-   * Primary class for taking a Failsafe Mod JSON input and converting to a TableRow.
+   * Primary class for taking a {@link FailsafeElement} {@link Mod} JSON input and converting to a
+   * {@link TableRow}.
    */
   public static class FailsafeModJsonToTableRow
     extends PTransform<PCollection<FailsafeElement<String, String>>, PCollectionTuple> {
@@ -60,6 +62,7 @@ public class FailsafeModJsonToTableRowTransformer {
      */
     public TupleTag<TableRow> transformOut = new TupleTag<TableRow>() {
     };
+
     /**
      * The tag for the dead letter output of the transformation.
      */
@@ -74,9 +77,6 @@ public class FailsafeModJsonToTableRowTransformer {
     private final String changeStreamName;
     private final FailsafeElementCoder<String, String> coder;
 
-    /**
-     * Primary entrypoint for the ModJsonFailsafeToTableRowTransformer.
-     */
     public FailsafeModJsonToTableRow(
       String spannerProject,
       String spannerInstance,
@@ -149,8 +149,8 @@ public class FailsafeModJsonToTableRowTransformer {
         this.spannerDatabaseClient = spanner.getDatabaseClient(
           DatabaseId.of(spannerProject, spannerInstance, spannerDatabase));
 
-        spannerTableByName = SpannerUtils.getSpannerTableByName(
-          spannerDatabaseClient, changeStreamsName);
+        spannerTableByName = new SpannerUtils(spannerDatabaseClient, changeStreamsName)
+          .getSpannerTableByName();
       }
 
       @Teardown
@@ -175,7 +175,7 @@ public class FailsafeModJsonToTableRowTransformer {
       }
 
       private TableRow modJsonStringToTableRow(String modJsonString) throws Exception {
-        ObjectNode modObjectNode = (ObjectNode) new ObjectMapper().readTree(modJsonString);
+        final ObjectNode modObjectNode = (ObjectNode) new ObjectMapper().readTree(modJsonString);
         for (final String excludeFieldName : BigQueryUtils.getBigQueryIntermediateMetadataFieldNames()) {
           if (modObjectNode.has(excludeFieldName)) {
             modObjectNode.remove(excludeFieldName);
@@ -189,7 +189,7 @@ public class FailsafeModJsonToTableRowTransformer {
           com.google.cloud.Timestamp
             .ofTimeSecondsAndNanos(mod.getCommitTimestampSeconds(), mod.getCommitTimestampNanos());
 
-        TableRow tableRow = new TableRow();
+        final TableRow tableRow = new TableRow();
         tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_ORIGINAL_PAYLOAD_JSON, modJsonString);
         tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_MOD_TYPE, mod.getModType().name());
         tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME, spannerTableName);
@@ -206,8 +206,8 @@ public class FailsafeModJsonToTableRowTransformer {
           mod.getNumberOfPartitionsInTransaction());
         tableRow.set(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_BIGQUERY_COMMIT_TIMESTAMP, "AUTO");
 
-        JSONObject keysJsonObject = new JSONObject(mod.getKeysJson());
-        Builder keyBuilder = com.google.cloud.spanner.Key.newBuilder();
+        final JSONObject keysJsonObject = new JSONObject(mod.getKeysJson());
+        final Builder keyBuilder = com.google.cloud.spanner.Key.newBuilder();
         for (final SpannerColumn spannerColumn : spannerTable.getPkColumns()) {
           final String spannerColumnName = spannerColumn.getName();
           // TODO: Test the case where some keys are null/empty from Mod.

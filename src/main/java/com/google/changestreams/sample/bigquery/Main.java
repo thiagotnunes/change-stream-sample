@@ -89,7 +89,8 @@ public class Main {
             .withChangeStreamName(changeStreamName)
             .withInclusiveStartAt(inclusiveStartAt)
             .withInclusiveEndAt(inclusiveEndAt)
-            .withTraceSampleProbability(1D)
+            // TODO: Add the following line back once it's added to the beam release.
+//            .withTraceSampleProbability(1D)
         )
 
         .apply("Add emitted time to records",

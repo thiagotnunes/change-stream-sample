@@ -49,10 +49,15 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Set;
 
+/**
+ * This pipeline ingests {@link DataChangeRecord} from Spanner Change Stream. The
+ * {@link DataChangeRecord} is then broken into {@link Mod}, which converted into {@link TableRow}
+ * and inserted into BigQuery table.
+ */
 public class SpannerChangeStreamsToBigQuery {
 
   /**
-   * String/String Coder for FailsafeElement.
+   * String/String Coder for {@link FailsafeElement}.
    */
   public static final FailsafeElementCoder<String, String> FAILSAFE_ELEMENT_CODER =
     FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of());
@@ -100,14 +105,15 @@ public class SpannerChangeStreamsToBigQuery {
    * @return The result of the pipeline execution.
    */
   public static PipelineResult run(Options options) {
-    /*
+    /**
      * Stages:
-     *   1) Read DataChangeRecord from Change Streams.
-     *   2) Create FailsafeElement of Mod JSON and merge from:
-     *       - DataChangeRecord.
+     *   1) Read {@link DataChangeRecord} from Change Streams.
+     *   2) Create {@link FailsafeElement} of {@link Mod} JSON and merge from:
+     *       - {@link DataChangeRecord}.
      *       - GCS Dead letter queue.
-     *   3) Convert Mod JSON into TableRow by reading from Spanner at Mod commit timestamp.
-     *   4) Append TableRow to BigQuery.
+     *   3) Convert {@link Mod} JSON into {@link TableRow} by reading from Spanner at commit
+     *   timestamp.
+     *   4) Append {@link TableRow} to BigQuery.
      *   5) Write Failures from 2), 3) and 4) to GCS dead letter queue.
      */
 
@@ -119,13 +125,6 @@ public class SpannerChangeStreamsToBigQuery {
 
     Timestamp startTimestamp = Timestamp.parseTimestamp(options.getStartTimestamp());
 
-    /*
-     * Stage 1: Ingest and Normalize Data to FailsafeElement with JSON Strings
-     *   a) Read DataStream data from GCS into JSON String FailsafeElements (datastreamJsonRecords)
-     *   b) Reconsume Dead Letter Queue data from GCS into JSON String FailsafeElements
-     *     (dlqJsonRecords)
-     *   c) Flatten DataStream and DLQ Streams (jsonRecords)
-     */
     SpannerIO.ReadChangeStream readChangeStream = SpannerIO
       .readChangeStream()
       .withSpannerConfig(
@@ -212,9 +211,6 @@ public class SpannerChangeStreamsToBigQuery {
           .withMethod(Write.Method.STREAMING_INSERTS)
           .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors()));
 
-    /*
-     * Stage 4: Write Failures to GCS Dead Letter Queue
-     */
     PCollection<String> transformDlqJson =
       tableRowTuple.get(failsafeModJsonToTableRow.transformDeadLetterOut)
         .apply("Failed Mod JSON From Transform", MapElements.via(new StringDeadLetterQueueSanitizer()));
@@ -275,7 +271,7 @@ public class SpannerChangeStreamsToBigQuery {
   }
 
   /**
-   * Remove the following intermediate metadata fields that are not user data from TableRow:
+   * Remove the following intermediate metadata fields that are not user data from {@link TableRow}:
    * * _metadata_error.
    * * _metadata_retry_count.
    * * _metadata_spanner_original_payload_json.
@@ -294,7 +290,10 @@ public class SpannerChangeStreamsToBigQuery {
     return cleanTableRow;
   }
 
-  // ModWithMetadata Json string is the original message that can be consumed by the pipeline.
+  /**
+   * DoFn that converts a {@link DataChangeRecord} to multiple {@link Mod} in serialized JSON
+   * format.
+   */
   static class DataChangeRecordToModJsonFn extends DoFn<DataChangeRecord, String> {
 
     @ProcessElement

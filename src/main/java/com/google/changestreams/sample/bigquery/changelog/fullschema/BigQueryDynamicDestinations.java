@@ -39,7 +39,12 @@ import org.apache.beam.sdk.values.ValueInSingleWindow;
 import java.util.List;
 import java.util.Map;
 
-public class BigQueryDynamicDestinations extends DynamicDestinations<TableRow, KV<TableId, TableRow>> {
+/**
+ * Class {@link BigQueryDynamicDestinations} loads into BigQuery tables in a dynamic fashion.
+ * The destination table is inferred from the provided {@link TableRow}.
+ */
+public class BigQueryDynamicDestinations extends
+  DynamicDestinations<TableRow, KV<TableId, TableRow>> {
 
   private final Map<String, SpannerTable> spannerTableByName;
   private final String bigQueryProject, bigQueryDataset, bigQueryTableTemplate;
@@ -60,8 +65,8 @@ public class BigQueryDynamicDestinations extends DynamicDestinations<TableRow, K
       .getService();
     final DatabaseClient spannerDatabaseClient = spanner.getDatabaseClient(
       DatabaseId.of(spannerProject, spannerInstance, spannerDatabase));
-    spannerTableByName = SpannerUtils.getSpannerTableByName(
-      spannerDatabaseClient, changeStreamName);
+    spannerTableByName = new SpannerUtils(spannerDatabaseClient, changeStreamName)
+      .getSpannerTableByName();
     spanner.close();
     this.bigQueryProject = bigQueryProject;
     this.bigQueryDataset = bigQueryDataset;
@@ -96,7 +101,7 @@ public class BigQueryDynamicDestinations extends DynamicDestinations<TableRow, K
     final String spannerTableName = (String) tableRow.get(BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_TABLE_NAME);
     final SpannerTable spannerTable = spannerTableByName.get(spannerTableName);
 
-    List<TableFieldSchema> fields = SpannerToBigQueryUtils.spannerColumnsToBigQueryIOFields(
+    final List<TableFieldSchema> fields = SpannerToBigQueryUtils.spannerColumnsToBigQueryIOFields(
       spannerTable.getAllColumns());
 
     // Add all metadata fields.

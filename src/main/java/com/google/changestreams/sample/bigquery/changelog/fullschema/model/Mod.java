@@ -17,6 +17,8 @@ package com.google.changestreams.sample.bigquery.changelog.fullschema.model;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.changestreams.sample.bigquery.changelog.fullschema.BigQueryDynamicDestinations;
 import com.google.cloud.Timestamp;
 import org.apache.beam.sdk.coders.AvroCoder;
 import org.apache.beam.sdk.coders.DefaultCoder;
@@ -26,6 +28,10 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Objects;
 
+/**
+ * Class {@link Mod} represents contains the keys and metadata of a Spanner row. Note it's different
+ * from the {@link org.apache.beam.sdk.io.gcp.spanner.changestreams.model.Mod}.
+ */
 @DefaultCoder(AvroCoder.class)
 public class Mod implements Serializable {
 

@@ -19,13 +19,11 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.changestreams.sample.bigquery.changelog.fullschema.schemautils.BigQueryUtils;
 import com.google.cloud.teleport.v2.cdc.dlq.DeadLetterQueueSanitizer;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * The BigQueryDeadLetterQueueSanitizer cleans and prepares failed BigQuery inserts to be stored in
- * a GCS Dead Letter Queue. NOTE: The input to a Sanitizer is flexible but the output must be a
- * String unless your override formatMessage()
+ * Class {@link BigQueryDeadLetterQueueSanitizer} cleans and prepares failed BigQuery inserts to be
+ * stored in a GCS Dead Letter Queue. NOTE: The input to a Sanitizer is flexible but the output
+ * must be a String unless your override formatMessage().
  */
 public class BigQueryDeadLetterQueueSanitizer
   extends DeadLetterQueueSanitizer<BigQueryInsertError, String> {
@@ -35,7 +33,7 @@ public class BigQueryDeadLetterQueueSanitizer
   @Override
   public String getJsonMessage(BigQueryInsertError input) {
     final TableRow tableRow = input.getRow();
-    // Extract the original payload from the TableRow.
+    /** Extract the original payload from the {@link TableRow}. */
     final String message = (String) tableRow.get(
       BigQueryUtils.BQ_CHANGELOG_FIELD_NAME_ORIGINAL_PAYLOAD_JSON);
     return message;

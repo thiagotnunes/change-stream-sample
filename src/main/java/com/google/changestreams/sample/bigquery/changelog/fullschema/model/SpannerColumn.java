@@ -21,6 +21,9 @@ import com.google.cloud.spanner.Type;
 
 import java.io.Serializable;
 
+/**
+ * Class {@link SpannerColumn} contains the name, type and ordinal position of a Spanner column.
+ */
 @AutoValue
 public abstract class SpannerColumn implements Serializable {
 

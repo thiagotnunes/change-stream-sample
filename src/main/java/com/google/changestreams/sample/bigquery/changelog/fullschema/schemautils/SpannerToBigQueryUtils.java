@@ -15,11 +15,15 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+/**
+ * Class {@link SpannerToBigQueryUtils} provides methods that convert Spanner types to BigQuery
+ * types.
+ */
 public class SpannerToBigQueryUtils {
 
   public static List<TableFieldSchema> spannerColumnsToBigQueryIOFields(
     List<SpannerColumn> spannerColumns) {
-    List<TableFieldSchema> bigQueryFields = new ArrayList<>(spannerColumns.size());
+    final List<TableFieldSchema> bigQueryFields = new ArrayList<>(spannerColumns.size());
     for (SpannerColumn spannerColumn : spannerColumns) {
       bigQueryFields.add(spannerColumnToBigQueryIOField(spannerColumn));
     }
@@ -28,7 +32,7 @@ public class SpannerToBigQueryUtils {
   }
 
   private static TableFieldSchema spannerColumnToBigQueryIOField(SpannerColumn spannerColumn) {
-    TableFieldSchema bigQueryField = new TableFieldSchema()
+    final TableFieldSchema bigQueryField = new TableFieldSchema()
       .setName(spannerColumn.getName())
       .setMode(Field.Mode.REPEATED.name());
     final Type spannerType = spannerColumn.getType();
@@ -53,7 +57,7 @@ public class SpannerToBigQueryUtils {
       bigQueryField.setType("TIMESTAMP");
     } else {
       bigQueryField.setMode(Field.Mode.NULLABLE.name());
-      StandardSQLTypeName bigQueryType;
+      final StandardSQLTypeName bigQueryType;
       switch (spannerType.getCode()) {
         case BOOL:
           bigQueryType = StandardSQLTypeName.BOOL;
@@ -109,8 +113,6 @@ public class SpannerToBigQueryUtils {
 
       rowCount++;
     }
-
-    resultSet.close();
   }
 
   private static Object getColumnValueFromResultSet(
@@ -126,14 +128,14 @@ public class SpannerToBigQueryUtils {
       return resultSet.getBooleanList(columnName);
     } else if (columnType.equals(Type.array(Type.bytes()))) {
       final List<ByteArray> bytesList = resultSet.getBytesList(columnName);
-      List<String> result = new LinkedList<>();
+      final List<String> result = new LinkedList<>();
       for (final ByteArray bytes : bytesList) {
         // TODO: IS base64 encoding sufficient?
         result.add(bytes.toBase64());
       }
       return result;
     } else if (columnType.equals(Type.array(Type.date()))) {
-      List<String> result = new LinkedList<>();
+      final List<String> result = new LinkedList<>();
       for (final Date date : resultSet.getDateList(columnName)) {
         result.add(date.toString());
       }

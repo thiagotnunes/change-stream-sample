@@ -21,6 +21,9 @@ import org.apache.beam.sdk.coders.DefaultCoder;
 import java.io.Serializable;
 import java.util.*;
 
+/**
+ * Class {@link SpannerTable} contains the table name and the columns of a Spanner table.
+ */
 @DefaultCoder(AvroCoder.class)
 public class SpannerTable implements Serializable {
 

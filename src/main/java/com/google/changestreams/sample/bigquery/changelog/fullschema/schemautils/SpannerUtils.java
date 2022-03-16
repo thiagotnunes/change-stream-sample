@@ -7,6 +7,9 @@ import org.json.JSONObject;
 
 import java.util.*;
 
+/**
+ * Class {@link SpannerUtils} provides methods that retrieve schema information from Spanner.
+ */
 public class SpannerUtils {
 
   private static final String INFORMATION_SCHEMA_TABLE_NAME = "TABLE_NAME";
@@ -16,53 +19,40 @@ public class SpannerUtils {
   private static final String INFORMATION_SCHEMA_CONSTRAINT_NAME = "CONSTRAINT_NAME";
   private static final String INFORMATION_SCHEMA_ALL = "ALL";
 
+  private DatabaseClient databaseClient;
+  private String changeStreamName;
+
+  public SpannerUtils(DatabaseClient databaseClient, String changeStreamName) {
+    this.databaseClient = databaseClient;
+    this.changeStreamName = changeStreamName;
+  }
+
   /**
-   * @return a map where the key is the table name and the value is the SpannerTable object of the
-   * table name.
+   * @return a map where the key is the table name and the value is the {@link SpannerTable} object
+   * of the table name.
    */
-  public static Map<String, SpannerTable> getSpannerTableByName(
-    DatabaseClient databaseClient, String changeStreamName) {
-    final Set<String> spannerTableNames = getSpannerTableNamesTrackedByChangeStreams(
-      databaseClient, changeStreamName);
+  public Map<String, SpannerTable> getSpannerTableByName() {
+    final Set<String> spannerTableNames = getSpannerTableNamesTrackedByChangeStreams();
 
     final Map<String, Set<String>> spannerColumnNamesExplicitlyTrackedByChangeStreamByTableName =
-      getSpannerColumnNamesExplicitlyTrackedByChangeStreamsByTableName(
-        databaseClient, changeStreamName);
+      getSpannerColumnNamesExplicitlyTrackedByChangeStreamsByTableName();
 
-    return getSpannerTableByName(databaseClient, spannerTableNames,
+    return getSpannerTableByName(spannerTableNames,
       spannerColumnNamesExplicitlyTrackedByChangeStreamByTableName);
   }
 
-  private static void appendWhereTableNamesEqualToSql(
-    StringBuilder stringBuilder, Set<String> spannerTableNames) {
-    if (!spannerTableNames.isEmpty()) {
-      stringBuilder.append(" WHERE");
-
-      for (String tableName : spannerTableNames) {
-        stringBuilder.append(" TABLE_NAME=\"");
-        stringBuilder.append(tableName);
-        stringBuilder.append("\"");
-        stringBuilder.append(" OR");
-      }
-
-      // Remove the last " OR".
-      stringBuilder.setLength(stringBuilder.length() - 3);
-    }
-  }
-
-  private static Map<String, SpannerTable> getSpannerTableByName(
-    DatabaseClient databaseClient, Set<String> spannerTableNames,
+  private Map<String, SpannerTable> getSpannerTableByName(Set<String> spannerTableNames,
     Map<String, Set<String>> spannerColumnNamesExplicitlyTrackedByChangeStreamByTableName) {
-    Map<String, List<SpannerColumn>> spannerColumnsByTableName = getSpannerColumnsByTableName(
-      databaseClient, spannerTableNames,
+    final Map<String, List<SpannerColumn>> spannerColumnsByTableName = getSpannerColumnsByTableName(
+      spannerTableNames,
       spannerColumnNamesExplicitlyTrackedByChangeStreamByTableName);
-    Map<String, Set<String>> keyColumnNameByTableName = getKeyColumnNameByTableName(
-      databaseClient, spannerTableNames);
+    final Map<String, Set<String>> keyColumnNameByTableName = getKeyColumnNameByTableName(
+      spannerTableNames);
     
-    Map<String, SpannerTable> result = new HashMap<>();
+    final Map<String, SpannerTable> result = new HashMap<>();
     for (final String tableName : spannerColumnsByTableName.keySet()) {
-      List<SpannerColumn> pkColumns = new LinkedList<>();
-      List<SpannerColumn> nonPkColumns = new LinkedList<>();
+      final List<SpannerColumn> pkColumns = new LinkedList<>();
+      final List<SpannerColumn> nonPkColumns = new LinkedList<>();
       final Set<String> keyColumnNames = keyColumnNameByTableName.get(tableName);
       for (final SpannerColumn spannerColumn : spannerColumnsByTableName.get(tableName)) {
         if (keyColumnNames.contains(spannerColumn.getName())) {
@@ -77,26 +67,32 @@ public class SpannerUtils {
     return result;
   }
 
-  /*
-   * Query INFORMATION_SCHEMA.COLUMNS to construct SpannerColumn for each Spanner column tracked by
-   * Change Stream.
+  /**
+   * Query INFORMATION_SCHEMA.COLUMNS to construct {@link SpannerColumn} for each Spanner column
+   * tracked by Change Stream.
    */
-  private static Map<String, List<SpannerColumn>> getSpannerColumnsByTableName(
-    DatabaseClient databaseClient, Set<String> spannerTableNames,
+  private Map<String, List<SpannerColumn>> getSpannerColumnsByTableName(
+    Set<String> spannerTableNames,
     Map<String, Set<String>> spannerColumnNamesExplicitlyTrackedByChangeStreamByTableName) {
-    Map<String, List<SpannerColumn>> result = new HashMap<>();
-    StringBuilder sqlStringBuilder = new StringBuilder(
+    final Map<String, List<SpannerColumn>> result = new HashMap<>();
+    final StringBuilder sqlStringBuilder = new StringBuilder(
       "SELECT TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION, SPANNER_TYPE "
         + "FROM INFORMATION_SCHEMA.COLUMNS");
 
     // Skip the columns of the tables that are not tracked by Change Streams.
-    appendWhereTableNamesEqualToSql(sqlStringBuilder, spannerTableNames);
+    if (!spannerTableNames.isEmpty()) {
+      sqlStringBuilder.append(" WHERE TABLE_NAME IN UNNEST (@tableNames)");
+    }
+
+    Statement.Builder statementBuilder = Statement.newBuilder(sqlStringBuilder.toString());
+    if (!spannerTableNames.isEmpty()) {
+      statementBuilder.bind("tableNames").to(Value.stringArray(new ArrayList<>(spannerTableNames)));
+    }
 
     try (final ResultSet columnsResultSet =
            databaseClient
              .singleUse()
-             .executeQuery(
-               Statement.of(sqlStringBuilder.toString()))) {
+             .executeQuery(statementBuilder.build())) {
       while (columnsResultSet.next()) {
         final String tableName = columnsResultSet.getString(INFORMATION_SCHEMA_TABLE_NAME);
         final String columnName = columnsResultSet.getString(INFORMATION_SCHEMA_COLUMN_NAME);
@@ -124,18 +120,26 @@ public class SpannerUtils {
    * Query INFORMATION_SCHEMA.KEY_COLUMN_USAGE to get the names of the primary key columns that are
    * tracked by Change Stream.
    */
-  private static Map<String, Set<String>> getKeyColumnNameByTableName(
-    DatabaseClient databaseClient, Set<String> spannerTableNames) {
-    Map<String, Set<String>> result = new HashMap<>();
-    StringBuilder sqlStringBuilder = new StringBuilder(
+  private Map<String, Set<String>> getKeyColumnNameByTableName(
+    Set<String> spannerTableNames) {
+    final Map<String, Set<String>> result = new HashMap<>();
+    final StringBuilder sqlStringBuilder = new StringBuilder(
       "SELECT TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE");
+
     // Skip the columns of the tables that are not tracked by Change Streams.
-    appendWhereTableNamesEqualToSql(sqlStringBuilder, spannerTableNames);
+    if (!spannerTableNames.isEmpty()) {
+      sqlStringBuilder.append(" WHERE TABLE_NAME IN UNNEST (@tableNames)");
+    }
+
+    Statement.Builder statementBuilder = Statement.newBuilder(sqlStringBuilder.toString());
+    if (!spannerTableNames.isEmpty()) {
+      statementBuilder.bind("tableNames").to(Value.stringArray(new ArrayList<>(spannerTableNames)));
+    }
 
     try (final ResultSet keyColumnsResultSet =
            databaseClient
              .singleUse()
-             .executeQuery(Statement.of(sqlStringBuilder.toString()))) {
+             .executeQuery(statementBuilder.build())) {
       while (keyColumnsResultSet.next()) {
         final String tableName = keyColumnsResultSet.getString(INFORMATION_SCHEMA_TABLE_NAME);
         final String columnName = keyColumnsResultSet.getString(INFORMATION_SCHEMA_COLUMN_NAME);
@@ -156,11 +160,10 @@ public class SpannerUtils {
   }
 
   /**
-   * @return the Spanner table names that are tracked by the Change Streams.
+   * @return the Spanner table names that are tracked by the Change Stream.
    */
-  private static Set<String> getSpannerTableNamesTrackedByChangeStreams(
-    DatabaseClient databaseClient, String changeStreamName) {
-    final boolean isChangeStreamForAll = isChangeStreamForAll(databaseClient, changeStreamName);
+  private Set<String> getSpannerTableNamesTrackedByChangeStreams() {
+    final boolean isChangeStreamForAll = isChangeStreamForAll();
 
     String sql =
       "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.CHANGE_STREAM_TABLES " +
@@ -175,7 +178,7 @@ public class SpannerUtils {
       statementBuilder = Statement.newBuilder(sql);
     }
 
-    Set<String> result = new HashSet<>();
+    final Set<String> result = new HashSet<>();
     try (final ResultSet resultSet =
            databaseClient
              .singleUse()
@@ -192,8 +195,7 @@ public class SpannerUtils {
   /**
    * @return if the Change Stream tracks all the tables in the database.
    */
-  public static boolean isChangeStreamForAll(DatabaseClient databaseClient,
-                                             String changeStreamName) {
+  private boolean isChangeStreamForAll() {
     final String sql =
       "SELECT CHANGE_STREAMS.ALL FROM INFORMATION_SCHEMA.CHANGE_STREAMS " +
         "WHERE CHANGE_STREAM_NAME = @changeStreamName";
@@ -234,20 +236,19 @@ public class SpannerUtils {
    * Return {"Singers" -> {"SingerId", "LastName"}} if we have the following Change Streams:
    * CREATE CHANGE STREAM SingerStream FOR Singers(SingerId, FirstName)
    */
-  private static Map<String, Set<String>>
-  getSpannerColumnNamesExplicitlyTrackedByChangeStreamsByTableName(
-    DatabaseClient databaseClient, String changeStreamsName) {
+  private Map<String, Set<String>>
+  getSpannerColumnNamesExplicitlyTrackedByChangeStreamsByTableName() {
     final String sql =
       "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.CHANGE_STREAM_COLUMNS "
         + "WHERE CHANGE_STREAM_NAME = @changeStreamName";
 
-    Map<String, Set<String>> result = new HashMap<>();
+    final Map<String, Set<String>> result = new HashMap<>();
     try (final ResultSet resultSet =
            databaseClient
              .singleUse()
              .executeQuery(
                Statement.newBuilder(sql)
-                 .bind("changeStreamName").to(changeStreamsName)
+                 .bind("changeStreamName").to(changeStreamName)
                  .build())) {
 
       while (resultSet.next()) {
@@ -261,7 +262,7 @@ public class SpannerUtils {
     return result;
   }
 
-  private static Type informationSchemaTypeToSpannerType(String type) {
+  private Type informationSchemaTypeToSpannerType(String type) {
     type = cleanInformationSchemaType(type);
     switch (type) {
       case "BOOL":
@@ -295,7 +296,7 @@ public class SpannerUtils {
     }
   }
 
-  private static String cleanInformationSchemaType(String type) {
+  private String cleanInformationSchemaType(String type) {
     // Remove type size, e.g. STRING(1024) -> STRING.
     final int leftParenthesisIdx = type.indexOf('(');
     if (leftParenthesisIdx != -1) {

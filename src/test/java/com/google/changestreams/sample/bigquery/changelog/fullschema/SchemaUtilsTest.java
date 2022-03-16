@@ -83,8 +83,10 @@ public class SchemaUtilsTest {
   private void mockInformationSchemaColumnsQuery(boolean isAlbumsTableIncluded) {
     String sql =
       "SELECT TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION, SPANNER_TYPE "
-        + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=\"Singers\"";
-    List<Struct> rows = new ArrayList<>(Arrays.asList(
+        + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN UNNEST (@tableNames)";
+    final List<String> tableNames = new ArrayList<>();
+    tableNames.add("Singers");
+    final List<Struct> rows = new ArrayList<>(Arrays.asList(
       Struct.newBuilder()
         .set("TABLE_NAME").to(Value.string("Singers"))
         .set("COLUMN_NAME").to(Value.string("SingerId"))
@@ -105,7 +107,7 @@ public class SchemaUtilsTest {
         .build()));
 
     if (isAlbumsTableIncluded) {
-      sql += " OR TABLE_NAME=\"Albums\"";
+      tableNames.add("Albums");
       rows.add(Struct.newBuilder()
         .set("TABLE_NAME").to(Value.string("Albums"))
         .set("COLUMN_NAME").to(Value.string("SingerId"))
@@ -127,7 +129,9 @@ public class SchemaUtilsTest {
     }
 
     when(mockReadContext.executeQuery(
-      Statement.of(sql))).thenReturn(
+      Statement.newBuilder(sql)
+        .bind("tableNames").to(Value.stringArray(tableNames))
+        .build())).thenReturn(
       ResultSets.forRows(Type.struct(
           Type.StructField.of("TABLE_NAME", Type.string()),
           Type.StructField.of("COLUMN_NAME", Type.string()),
@@ -155,8 +159,10 @@ public class SchemaUtilsTest {
   private void mockInformationSchemaKeyColumnUsageQuery(boolean isAlbumsTableIncluded) {
     String sql =
       "SELECT TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE " +
-        "WHERE TABLE_NAME=\"Singers\"";
-    List<Struct> rows = new ArrayList<>(Collections.singletonList(
+        "WHERE TABLE_NAME IN UNNEST (@tableNames)";
+    final List<String> tableNames = new ArrayList<>();
+    tableNames.add("Singers");
+    final List<Struct> rows = new ArrayList<>(Collections.singletonList(
       Struct.newBuilder()
         .set("TABLE_NAME").to(Value.string("Singers"))
         .set("COLUMN_NAME").to(Value.string("SingerId"))
@@ -165,7 +171,7 @@ public class SchemaUtilsTest {
     ));
 
     if (isAlbumsTableIncluded) {
-      sql += " OR TABLE_NAME=\"Albums\"";
+      tableNames.add("Albums");
       rows.add(Struct.newBuilder()
         .set("TABLE_NAME").to(Value.string("Albums"))
         .set("COLUMN_NAME").to(Value.string("SingerId"))
@@ -179,7 +185,9 @@ public class SchemaUtilsTest {
     }
 
     when(mockReadContext.executeQuery(
-      Statement.of(sql))).thenReturn(
+      Statement.newBuilder(sql)
+        .bind("tableNames").to(Value.stringArray(tableNames))
+        .build())).thenReturn(
       ResultSets.forRows(Type.struct(
         Type.StructField.of("TABLE_NAME", Type.string()),
         Type.StructField.of("COLUMN_NAME", Type.string()),
@@ -234,13 +242,13 @@ public class SchemaUtilsTest {
       SpannerColumn.create("AlbumId", Type.int64(), 2));
     final List<SpannerColumn> albumsNonPkColumns = Collections.singletonList(
       SpannerColumn.create("AlbumName", Type.string(), 3));
-    Map<String, SpannerTable> expectedSpannerTableByName = new HashMap<>();
+    final Map<String, SpannerTable> expectedSpannerTableByName = new HashMap<>();
     expectedSpannerTableByName.put(
       "Singers", new SpannerTable("Singers", singersPkColumns, singersNonPkColumns));
     expectedSpannerTableByName.put(
       "Albums", new SpannerTable("Albums", albumsPkColumns, albumsNonPkColumns));
     assertEquals(expectedSpannerTableByName,
-      SpannerUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
+      new SpannerUtils(mockDatabaseClient, changeStreamName).getSpannerTableByName());
   }
 
   /**
@@ -271,11 +279,11 @@ public class SchemaUtilsTest {
     final List<SpannerColumn> singersNonPkColumns = Arrays.asList(
       SpannerColumn.create("FirstName", Type.string(), 2),
       SpannerColumn.create("LastName", Type.string(), 3));
-    Map<String, SpannerTable> expectedSpannerTableByName = new HashMap<>();
+    final Map<String, SpannerTable> expectedSpannerTableByName = new HashMap<>();
     expectedSpannerTableByName.put(
       "Singers", new SpannerTable("Singers", singersPkColumns, singersNonPkColumns));
     assertEquals(expectedSpannerTableByName,
-      SpannerUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
+      new SpannerUtils(mockDatabaseClient, changeStreamName).getSpannerTableByName());
   }
 
   /**
@@ -314,16 +322,16 @@ public class SchemaUtilsTest {
       SpannerColumn.create("SingerId", Type.int64(), 1));
     final List<SpannerColumn> singersNonPkColumns = Collections.singletonList(
       SpannerColumn.create("FirstName", Type.string(), 2));
-    Map<String, SpannerTable> expectedSpannerTableByName = new HashMap<>();
+    final Map<String, SpannerTable> expectedSpannerTableByName = new HashMap<>();
     expectedSpannerTableByName.put(
       "Singers", new SpannerTable("Singers", singersPkColumns, singersNonPkColumns));
     assertEquals(expectedSpannerTableByName,
-      SpannerUtils.getSpannerTableByName(mockDatabaseClient, changeStreamName));
+      new SpannerUtils(mockDatabaseClient, changeStreamName).getSpannerTableByName());
   }
 
   @Test
   public void testSpannerSnapshotRowToBigQueryTableRow() {
-    TableRow tableRow = new TableRow();
+    final TableRow tableRow = new TableRow();
 
     final Boolean[] booleanArray = {true, false, true};
     final ByteArray[] bytesArray = {
@@ -421,7 +429,7 @@ public class SchemaUtilsTest {
   // TODO: Test the case where some keys are null/empty from Mod.
   @Test
   public void testAppendToSpannerKey() {
-    JSONObject keysJsonObject = new JSONObject();
+    final JSONObject keysJsonObject = new JSONObject();
     keysJsonObject.put("BoolCol", true);
     keysJsonObject.put("BytesCol", ByteArray.copyFrom("123").toBase64());
     keysJsonObject.put("DateCol", "2022-01-22");
@@ -430,7 +438,7 @@ public class SchemaUtilsTest {
     keysJsonObject.put("NumericCol", new BigDecimal(3.141592));
     keysJsonObject.put("StringCol", "abc");
     keysJsonObject.put("TimestampCol", "2022-03-07T01:50:53.972000000Z");
-    Key.Builder keyBuilder = com.google.cloud.spanner.Key.newBuilder();
+    final Key.Builder keyBuilder = com.google.cloud.spanner.Key.newBuilder();
     for (final SpannerColumn spannerColumn : spannerColumnsOfAllTypes) {
       String typeName = spannerColumn.getType().getCode().name();
       // Array and JSON are not valid Spanner key type.
