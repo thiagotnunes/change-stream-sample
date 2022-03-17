@@ -23,7 +23,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
 /**
  * Class {@link BigQueryDeadLetterQueueSanitizer} cleans and prepares failed BigQuery inserts to be
  * stored in a GCS Dead Letter Queue. NOTE: The input to a Sanitizer is flexible but the output
- * must be a String unless your override formatMessage().
+ * must be a String unless you override formatMessage().
  */
 public class BigQueryDeadLetterQueueSanitizer
   extends DeadLetterQueueSanitizer<BigQueryInsertError, String> {
