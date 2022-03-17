@@ -22,7 +22,6 @@ EOF
 if ! command -v mvn &>/dev/null; then
 	cat <<EOF
 Please install Maven!
-
 Linux:  sudo apt install -y maven
 Mac:  brew install maven
 EOF
@@ -101,7 +100,7 @@ test ! "${REGION}" && echo "Missing region" && print_usage
 mvn \
   clean \
   compile \
-  exec:java -Dexec.mainClass=com.google.changestreams.sample.bigquery.Main \
+  exec:java -Dexec.mainClass=com.google.changestreams.sample.bigquery.SpannerChangeStreamsToBigQuerySerialized \
   -Dexec.cleanupDaemonThreads=false \
   -Dexec.args=" \
     --project=${PROJECT} \
